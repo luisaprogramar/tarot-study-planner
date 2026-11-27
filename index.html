@@ -1,452 +1,4121 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tarot Study Planner — Planejador de Estudos</title>
-    <!-- Google Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <!-- FontAwesome Icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Stylesheet -->
-    <link rel="stylesheet" href="style.css">
-</head>
-<body>
-    <div class="app-container">
-        <!-- Sidebar Navigation -->
-        <aside class="sidebar">
-            <div class="sidebar-header">
-                <div class="logo-icon"><i class="fa-solid fa-moon"></i></div>
-                <div class="logo-text">
-                    <h1>Tarot Planner</h1>
-                    <span>Formação Acadêmica</span>
-                </div>
-            </div>
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import {
+  Sparkles,
+  Moon,
+  Sun,
+  Calendar as CalendarIcon,
+  CheckCircle2,
+  Circle,
+  BookOpen,
+  Layers,
+  BarChart3,
+  FileText,
+  Settings as SettingsIcon,
+  ChevronRight,
+  ChevronDown,
+  ChevronLeft,
+  Star,
+  Search,
+  Filter,
+  Play,
+  RotateCcw,
+  Plus,
+  Trash2,
+  Edit3,
+  Check,
+  X,
+  ArrowUp,
+  ArrowDown,
+  Clock,
+  Award,
+  Flame,
+  Bell,
+  Download,
+  Upload,
+  Menu,
+  Compass,
+  Eye,
+  Bookmark
+} from 'lucide-react';
 
-            <nav class="sidebar-nav">
-                <button class="nav-item active" data-page="dashboard">
-                    <i class="fa-solid fa-house-chimney"></i> Dashboard
-                </button>
-                <button class="nav-item" data-page="cronograma">
-                    <i class="fa-solid fa-book-open"></i> Cronograma
-                </button>
-                <button class="nav-item" data-page="biblioteca">
-                    <i class="fa-solid fa-clone"></i> Biblioteca (78)
-                </button>
-                <button class="nav-item" data-page="progresso">
-                    <i class="fa-solid fa-chart-line"></i> Meu Progresso
-                </button>
-                <button class="nav-item" data-page="anotacoes">
-                    <i class="fa-solid fa-feather"></i> Anotações
-                </button>
-                <button class="nav-item" data-page="configuracoes">
-                    <i class="fa-solid fa-gear"></i> Configurações
-                </button>
-            </nav>
+// ============================================================================
+// TIPOS E ESTRUTURAS DE DADOS
+// ============================================================================
 
-            <div class="sidebar-footer">
-                <div class="user-mini-card">
-                    <div class="avatar"><i class="fa-solid fa-sparkles"></i></div>
-                    <div class="user-info">
-                        <span id="sidebar-username" class="uname">Taróloga</span>
-                        <span id="sidebar-streak" class="ustreak"><i class="fa-solid fa-fire"></i> 0 dias de sequência</span>
-                    </div>
-                </div>
-            </div>
-        </aside>
+export type SuitType = 'major' | 'wands' | 'cups' | 'swords' | 'pentacles';
 
-        <!-- Main Content Area -->
-        <main class="main-content">
-            <!-- Top Bar -->
-            <header class="topbar">
-                <div class="topbar-left">
-                    <button id="mobile-toggle" class="mobile-toggle"><i class="fa-solid fa-bars"></i></button>
-                    <div class="current-date-display" id="header-date">Carregando data...</div>
-                </div>
-                <div class="topbar-right">
-                    <button class="quick-action-btn" id="btn-quick-continue">
-                        <i class="fa-solid fa-play"></i> Continuar de onde parei
+export interface TarotCardMeta {
+  id: string;
+  name: string;
+  numberLabel: string;
+  suit: SuitType;
+  suitLabel: string;
+  order: number;
+}
+
+export interface StudyTask {
+  id: string;
+  title: string;
+  completed: boolean;
+  completedAt?: string;
+}
+
+export interface StudyDay {
+  id: string;
+  dayNumber: number;
+  moduleId: number;
+  moduleTitle: string;
+  stageTitle: string;
+  theme: string;
+  objective: string; // Puramente organizacional, sem conteúdo didático
+  cardId?: string;
+  isReview?: boolean;
+  tasks: StudyTask[];
+}
+
+export interface ModuleMeta {
+  id: number;
+  title: string;
+  subtitle: string;
+  stage: string;
+}
+
+export interface PersonalNote {
+  id: string;
+  title: string;
+  content: string;
+  moduleId?: number;
+  cardId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PlannerSettings {
+  userName: string;
+  startDate: string; // YYYY-MM-DD
+  daysPerWeek: number; // 1 a 7
+  targetPaceLabel: string;
+  visualReminders: boolean;
+}
+
+export interface StudyLogEntry {
+  date: string; // YYYY-MM-DD
+  tasksCompleted: number;
+  daysCompleted: number;
+}
+
+export interface PlannerState {
+  days: StudyDay[];
+  favorites: string[]; // array de day.id
+  dayNotes: Record<string, { personal: string; observations: string }>;
+  cardDates: Record<string, { startedAt?: string; completedAt?: string }>;
+  notes: PersonalNote[];
+  settings: PlannerSettings;
+  activityLog: Record<string, StudyLogEntry>; // chave YYYY-MM-DD
+  lastVisitedDayId: string;
+}
+
+type PageRoute =
+  | 'dashboard'
+  | 'schedule'
+  | 'daily'
+  | 'library'
+  | 'progress'
+  | 'notes'
+  | 'settings';
+
+// ============================================================================
+// CONSTANTES PEDAGÓGICAS & AS 78 CARTAS (APENAS IDENTIFICAÇÃO ORGANIZACIONAL)
+// ============================================================================
+
+const MAJOR_ARCANA_LIST: { num: string; name: string; id: string }[] = [
+  { num: '0', name: 'O Louco', id: 'maj-00' },
+  { num: 'I', name: 'O Mago', id: 'maj-01' },
+  { num: 'II', name: 'A Sacerdotisa', id: 'maj-02' },
+  { num: 'III', name: 'A Imperatriz', id: 'maj-03' },
+  { num: 'IV', name: 'O Imperador', id: 'maj-04' },
+  { num: 'V', name: 'O Hierofante', id: 'maj-05' },
+  { num: 'VI', name: 'Os Enamorados', id: 'maj-06' },
+  { num: 'VII', name: 'O Carro', id: 'maj-07' },
+  { num: 'VIII', name: 'A Justiça', id: 'maj-08' },
+  { num: 'IX', name: 'O Eremita', id: 'maj-09' },
+  { num: 'X', name: 'A Roda da Fortuna', id: 'maj-10' },
+  { num: 'XI', name: 'A Força', id: 'maj-11' },
+  { num: 'XII', name: 'O Enforcado', id: 'maj-12' },
+  { num: 'XIII', name: 'A Morte', id: 'maj-13' },
+  { num: 'XIV', name: 'A Temperança', id: 'maj-14' },
+  { num: 'XV', name: 'O Diabo', id: 'maj-15' },
+  { num: 'XVI', name: 'A Torre', id: 'maj-16' },
+  { num: 'XVII', name: 'A Estrela', id: 'maj-17' },
+  { num: 'XVIII', name: 'A Lua', id: 'maj-18' },
+  { num: 'XIX', name: 'O Sol', id: 'maj-19' },
+  { num: 'XX', name: 'O Julgamento', id: 'maj-20' },
+  { num: 'XXI', name: 'O Mundo', id: 'maj-21' },
+];
+
+const SUITS_META: { key: Exclude<SuitType, 'major'>; label: string; prefix: string }[] = [
+  { key: 'wands', label: 'Paus', prefix: 'wands' },
+  { key: 'cups', label: 'Copas', prefix: 'cups' },
+  { key: 'swords', label: 'Espadas', prefix: 'swords' },
+  { key: 'pentacles', label: 'Ouros', prefix: 'pent' },
+];
+
+const PIP_NAMES = [
+  { num: 'Ás', label: 'Ás' },
+  { num: '2', label: 'Dois' },
+  { num: '3', label: 'Três' },
+  { num: '4', label: 'Quatro' },
+  { num: '5', label: 'Cinco' },
+  { num: '6', label: 'Seis' },
+  { num: '7', label: 'Sete' },
+  { num: '8', label: 'Oito' },
+  { num: '9', label: 'Nove' },
+  { num: '10', label: 'Dez' },
+];
+
+const COURT_NAMES = [
+  { num: 'Pajem', label: 'Pajem' },
+  { num: 'Cavaleiro', label: 'Cavaleiro' },
+  { num: 'Rainha', label: 'Rainha' },
+  { num: 'Rei', label: 'Rei' },
+];
+
+export const ALL_78_CARDS: TarotCardMeta[] = (() => {
+  const cards: TarotCardMeta[] = [];
+  let order = 1;
+
+  MAJOR_ARCANA_LIST.forEach((m) => {
+    cards.push({
+      id: m.id,
+      name: m.name,
+      numberLabel: m.num,
+      suit: 'major',
+      suitLabel: 'Arcanos Maiores',
+      order: order++,
+    });
+  });
+
+  SUITS_META.forEach((suit) => {
+    PIP_NAMES.forEach((pip, idx) => {
+      cards.push({
+        id: `${suit.prefix}-${idx + 1}`,
+        name: `${pip.label} de ${suit.label}`,
+        numberLabel: pip.num,
+        suit: suit.key,
+        suitLabel: `Naipe de ${suit.label}`,
+        order: order++,
+      });
+    });
+    COURT_NAMES.forEach((court, idx) => {
+      cards.push({
+        id: `${suit.prefix}-court-${idx + 1}`,
+        name: `${court.label} de ${suit.label}`,
+        numberLabel: court.num,
+        suit: suit.key,
+        suitLabel: `Naipe de ${suit.label}`,
+        order: order++,
+      });
+    });
+  });
+
+  return cards;
+})();
+
+// Os 40 tópicos obrigatórios para cada Arcano Maior e cada Carta Numerada
+const FORTY_CARD_TOPICS: string[] = [
+  'Identidade e fundamentos',
+  'História e origem',
+  'Simbolismo visual',
+  'Personagens e elementos da ilustração',
+  'Cores, animais e objetos',
+  'Arquétipo',
+  'Personalidade',
+  'Temperamento',
+  'Características positivas e negativas',
+  'Medos, desejos e inseguranças',
+  'Comportamento',
+  'Aparência física',
+  'Características externas e estilo',
+  'Amor e relacionamentos',
+  'Sentimentos e pensamentos',
+  'Intenções amorosas',
+  'Ciúmes, possessividade e fidelidade',
+  'Sexualidade',
+  'Libido e desejo',
+  'Fantasias e sensualidade',
+  'Dinâmicas de poder',
+  'Espiritualidade',
+  'Intuição e mediunidade',
+  'Divindades e figuras mitológicas associadas',
+  'Guias e entidades como correspondências simbólicas',
+  'Trabalho e carreira',
+  'Dinheiro e prosperidade',
+  'Saúde e bem-estar simbólicos',
+  'Temporalidade e previsões',
+  'Sim/não e conselhos',
+  'Correspondências astrológicas',
+  'Numerologia',
+  'Cabala',
+  'Alquimia',
+  'Plantas, cristais e animais simbólicos',
+  'Significados invertidos',
+  'Combinações com outros Arcanos Maiores',
+  'Combinações com os Arcanos Menores',
+  'Interpretações em diferentes contextos',
+  'Revisão geral da carta',
+];
+
+const FIVE_DAY_CARD_SUBTHEMES = [
+  {
+    label: 'Parte 1 — Estrutura, Iconografia e Arquétipo',
+    objective: 'Organizar o estudo inicial da estrutura, história, simbolismo visual e perfil arquetípico da carta.',
+  },
+  {
+    label: 'Parte 2 — Psicologia, Comportamento e Expressão',
+    objective: 'Mapear os tópicos de temperamento, sombra, comportamento e características externas atribuídas à carta.',
+  },
+  {
+    label: 'Parte 3 — Afetividade, Relacionamentos e Sexualidade',
+    objective: 'Estruturar a pesquisa sobre dinâmicas emocionais, amorosas, desejo e poder simbólico.',
+  },
+  {
+    label: 'Parte 4 — Espiritualidade, Plano Material e Previsões',
+    objective: 'Organizar o estudo das correspondências espirituais, profissionais, financeiras e temporais.',
+  },
+  {
+    label: 'Parte 5 — Correspondências Herméticas, Combinações e Síntese',
+    objective: 'Consolidar correspondências esotéricas, inversões, combinações e revisão integral da carta.',
+  },
+];
+
+// Os 10 tópicos obrigatórios para o estudo geral de cada Naipe
+const SUIT_OVERVIEW_TOPICS: string[] = [
+  'Elemento',
+  'Correspondências',
+  'Numerologia',
+  'Simbolismo',
+  'Personalidade',
+  'Amor',
+  'Sexualidade',
+  'Espiritualidade',
+  'Trabalho',
+  'Combinações',
+];
+
+// Os 17 tópicos obrigatórios para cada Carta da Corte
+const COURT_CARD_TOPICS: string[] = [
+  'Arquétipo',
+  'Personalidade',
+  'Maturidade',
+  'Idade simbólica',
+  'Aparência',
+  'Temperamento',
+  'Comportamento',
+  'Amor',
+  'Sexualidade',
+  'Sentimentos',
+  'Intenções',
+  'Espiritualidade',
+  'Trabalho',
+  'Dinheiro',
+  'Aspectos sombrios',
+  'Inversões',
+  'Combinações',
+];
+
+export const MODULES_CATALOG: ModuleMeta[] = [
+  { id: 1, title: 'Módulo 1 — Fundamentos do Tarot', subtitle: 'História, escolas tradicionais e estrutura iconográfica', stage: 'Etapa I • Bases Teóricas' },
+  { id: 2, title: 'Módulo 2 — Sistemas Esotéricos', subtitle: 'Hermetismo, Cabala, Astrologia, Numerologia e Alquimia', stage: 'Etapa I • Bases Teóricas' },
+  { id: 3, title: 'Módulo 3 — Psicologia e Simbolismo', subtitle: 'Psicologia analítica, arquétipos e simbolismo onírico', stage: 'Etapa I • Bases Teóricas' },
+  { id: 4, title: 'Módulo 4 — Fundamentos da Cartomancia', subtitle: 'Metodologia de perguntas, leitura de sequências e ética', stage: 'Etapa I • Bases Teóricas' },
+  { id: 5, title: 'Módulo 5 — Arcanos Maiores (I): 0 ao V', subtitle: 'Estudo aprofundado de O Louco até O Hierofante', stage: 'Etapa II • Arcanos Maiores' },
+  { id: 6, title: 'Módulo 6 — Arcanos Maiores (II): VI ao XI', subtitle: 'Estudo aprofundado de Os Enamorados até A Força', stage: 'Etapa II • Arcanos Maiores' },
+  { id: 7, title: 'Módulo 7 — Arcanos Maiores (III): XII ao XVI', subtitle: 'Estudo aprofundado de O Enforcado até A Torre', stage: 'Etapa II • Arcanos Maiores' },
+  { id: 8, title: 'Módulo 8 — Arcanos Maiores (IV): XVII ao XXI', subtitle: 'Estudo aprofundado de A Estrela até O Mundo', stage: 'Etapa II • Arcanos Maiores' },
+  { id: 9, title: 'Módulo 9 — Arcanos Menores: Paus', subtitle: 'Fundamentos do naipe de Paus e cartas do Ás ao 10', stage: 'Etapa III • Arcanos Menores' },
+  { id: 10, title: 'Módulo 10 — Arcanos Menores: Copas', subtitle: 'Fundamentos do naipe de Copas e cartas do Ás ao 10', stage: 'Etapa III • Arcanos Menores' },
+  { id: 11, title: 'Módulo 11 — Arcanos Menores: Espadas', subtitle: 'Fundamentos do naipe de Espadas e cartas do Ás ao 10', stage: 'Etapa III • Arcanos Menores' },
+  { id: 12, title: 'Módulo 12 — Arcanos Menores: Ouros', subtitle: 'Fundamentos do naipe de Ouros e cartas do Ás ao 10', stage: 'Etapa III • Arcanos Menores' },
+  { id: 13, title: 'Módulo 13 — Cartas da Corte', subtitle: 'Estudo individual das 16 figuras reais dos quatro naipes', stage: 'Etapa IV • Figuras da Corte' },
+  { id: 14, title: 'Módulo 14 — Interpretação Avançada', subtitle: 'Combinações complexas, modificadores e leitura psicológica', stage: 'Etapa V • Maestria Interpretativa' },
+  { id: 15, title: 'Módulo 15 — Sexualidade no Tarot', subtitle: 'Desejo, atração, dinâmicas de poder e compatibilidade', stage: 'Etapa V • Maestria Interpretativa' },
+  { id: 16, title: 'Módulo 16 — Espiritualidade no Tarot', subtitle: 'Mitologia, correspondências ocultistas, magia e elementos', stage: 'Etapa V • Maestria Interpretativa' },
+  { id: 17, title: 'Módulo 17 — Tiragens e Prática', subtitle: 'Métodos de tiragem, clarificação e estudos de caso', stage: 'Etapa VI • Prática Estruturada' },
+];
+
+// ============================================================================
+// GERADOR PROGRAMÁTICO COMPLETO DO CRONOGRAMA (SEM RESUMIR NENHUM TÓPICO)
+// ============================================================================
+
+function chunkArray<T>(arr: T[], size: number): T[][] {
+  const res: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) {
+    res.push(arr.slice(i, i + size));
+  }
+  return res;
+}
+
+export function generateFullCurriculum(): StudyDay[] {
+  const days: StudyDay[] = [];
+  let dayCounter = 1;
+  let taskCounter = 1;
+
+  const addDay = (params: {
+    moduleId: number;
+    theme: string;
+    objective: string;
+    topics: string[];
+    cardId?: string;
+    isReview?: boolean;
+  }) => {
+    const mod = MODULES_CATALOG.find((m) => m.id === params.moduleId)!;
+    const currentDayNum = dayCounter++;
+    days.push({
+      id: `day-${String(currentDayNum).padStart(3, '0')}`,
+      dayNumber: currentDayNum,
+      moduleId: mod.id,
+      moduleTitle: mod.title,
+      stageTitle: mod.stage,
+      theme: params.theme,
+      objective: params.objective,
+      cardId: params.cardId,
+      isReview: params.isReview,
+      tasks: params.topics.map((t) => ({
+        id: `task-${taskCounter++}`,
+        title: t,
+        completed: false,
+      })),
+    });
+  };
+
+  // --------------------------------------------------------------------------
+  // MÓDULO 1 — FUNDAMENTOS DO TAROT (24 tópicos em 6 dias equilibrados)
+  // --------------------------------------------------------------------------
+  const mod1Days: { theme: string; objective: string; topics: string[] }[] = [
+    {
+      theme: 'Origens Históricas e Primeiros Baralhos',
+      objective: 'Organizar a pesquisa histórica sobre o surgimento dos primeiros baralhos e o contexto renascentista.',
+      topics: [
+        'História e origem do Tarot',
+        'Tarot como jogo de cartas',
+        'Primeiros baralhos históricos',
+        'Tarot de Visconti-Sforza',
+      ],
+    },
+    {
+      theme: 'Tradição Clássica e Transição Esotérica',
+      objective: 'Distribuir os tópicos referentes à tradição de Marselha e ao advento do ocultismo europeu.',
+      topics: [
+        'Tarot de Marselha',
+        'Surgimento do Tarot esotérico',
+        'Ocultismo europeu',
+        'Golden Dawn',
+      ],
+    },
+    {
+      theme: 'Escola Inglesa: Rider-Waite-Smith',
+      objective: 'Mapear o estudo dos criadores e da estrutura do baralho Rider-Waite-Smith.',
+      topics: [
+        'Arthur Edward Waite',
+        'Pamela Colman Smith',
+        'Rider-Waite-Smith',
+      ],
+    },
+    {
+      theme: 'Escola de Thoth e Comparação entre Escolas',
+      objective: 'Organizar a investigação sobre o sistema de Crowley e o comparativo entre tradições.',
+      topics: [
+        'Aleister Crowley',
+        'Tarot de Thoth',
+        'Diferenças entre escolas',
+      ],
+    },
+    {
+      theme: 'Arquitetura Geral dos 78 Arcanos',
+      objective: 'Catalogar as divisões estruturais entre Arcanos Maiores, Menores, naipes e corte.',
+      topics: [
+        'Estrutura dos 78 arcanos',
+        'Arcanos Maiores e Menores',
+        'Os quatro naipes',
+        'Cartas numeradas',
+        'Cartas da corte',
+      ],
+    },
+    {
+      theme: 'Fundamentos do Simbolismo Iconográfico',
+      objective: 'Estruturar o estudo dos elementos visuais recorrentes nas lâminas.',
+      topics: [
+        'Simbolismo visual',
+        'Simbolismo das cores',
+        'Simbolismo dos animais',
+        'Simbolismo dos objetos',
+        'Simbolismo dos cenários',
+      ],
+    },
+  ];
+  mod1Days.forEach((d) => addDay({ moduleId: 1, ...d }));
+
+  // --------------------------------------------------------------------------
+  // MÓDULO 2 — SISTEMAS ESOTÉRICOS (17 tópicos em 5 dias)
+  // --------------------------------------------------------------------------
+  const mod2Days: { theme: string; objective: string; topics: string[] }[] = [
+    {
+      theme: 'Hermetismo e Fundamentos da Cabala',
+      objective: 'Organizar o estudo inicial das leis herméticas e da estrutura cabalística aplicada.',
+      topics: [
+        'Hermetismo',
+        'Cabala hermética',
+        'Árvore da Vida',
+        'Dez Sephiroth',
+        'Vinte e dois caminhos',
+      ],
+    },
+    {
+      theme: 'Astrologia Tradicional e Esotérica',
+      objective: 'Distribuir os tópicos de correspondência astrológica entre planetas e signos.',
+      topics: [
+        'Astrologia tradicional',
+        'Astrologia esotérica',
+        'Planetas',
+        'Signos',
+      ],
+    },
+    {
+      theme: 'Elementos e Modalidades Astrológicas',
+      objective: 'Mapear o estudo das qualidades elementais e dinâmicas das modalidades.',
+      topics: [
+        'Elementos',
+        'Modalidades astrológicas',
+      ],
+    },
+    {
+      theme: 'Sistemas Numerológicos',
+      objective: 'Estruturar a pesquisa comparativa entre numerologia pitagórica e esotérica.',
+      topics: [
+        'Numerologia pitagórica',
+        'Numerologia esotérica',
+      ],
+    },
+    {
+      theme: 'Alquimia, Mitologia e Arquétipos Universais',
+      objective: 'Organizar o levantamento das operações alquímicas, metais e matrizes mitológicas.',
+      topics: [
+        'Alquimia',
+        'Metais planetários',
+        'Correspondências mitológicas',
+        'Arquétipos universais',
+      ],
+    },
+  ];
+  mod2Days.forEach((d) => addDay({ moduleId: 2, ...d }));
+
+  // --------------------------------------------------------------------------
+  // MÓDULO 3 — PSICOLOGIA E SIMBOLISMO (13 tópicos em 4 dias)
+  // --------------------------------------------------------------------------
+  const mod3Days: { theme: string; objective: string; topics: string[] }[] = [
+    {
+      theme: 'Psicologia Analítica e Inconsciente Coletivo',
+      objective: 'Organizar o estudo introdutório aos conceitos junguianos aplicados à leitura simbólica.',
+      topics: [
+        'Carl Jung',
+        'Arquétipos',
+        'Inconsciente coletivo',
+      ],
+    },
+    {
+      theme: 'Estruturas da Psique: Sombra, Persona, Anima e Animus',
+      objective: 'Mapear os tópicos relativos aos complexos e polaridades psíquicas.',
+      topics: [
+        'Sombra',
+        'Persona',
+        'Anima e animus',
+        'Projeção psicológica',
+      ],
+    },
+    {
+      theme: 'Linguagem Onírica e Simbolismo Cromático',
+      objective: 'Estruturar a pesquisa sobre sonhos e percepção psicológica das cores.',
+      topics: [
+        'Simbolismo dos sonhos',
+        'Psicologia das cores',
+      ],
+    },
+    {
+      theme: 'Dinâmicas Comportamentais e Individuação',
+      objective: 'Consolidar o levantamento dos mecanismos psíquicos e do processo de individuação.',
+      topics: [
+        'Comportamento humano',
+        'Desejo e repressão',
+        'Mecanismos de defesa',
+        'Individuação',
+      ],
+    },
+  ];
+  mod3Days.forEach((d) => addDay({ moduleId: 3, ...d }));
+
+  // --------------------------------------------------------------------------
+  // MÓDULO 4 — FUNDAMENTOS DA CARTOMANCIA (14 tópicos em 4 dias + 1 revisão)
+  // --------------------------------------------------------------------------
+  const mod4Days: { theme: string; objective: string; topics: string[] }[] = [
+    {
+      theme: 'Estruturação e Formulação de Perguntas',
+      objective: 'Organizar o estudo sobre clareza, escopo e tipologia de questões na cartomancia.',
+      topics: [
+        'Formulação de perguntas',
+        'Perguntas abertas e fechadas',
+        'Contextualização',
+      ],
+    },
+    {
+      theme: 'Leitura de Cartas Isoladas e Sequências',
+      objective: 'Mapear as técnicas de análise individual e encadeamento narrativo entre lâminas.',
+      topics: [
+        'Cartas isoladas',
+        'Sequências',
+        'Cartas positivas, negativas e neutras',
+        'Cartas de confirmação',
+      ],
+    },
+    {
+      theme: 'Tensões, Bloqueios e Camadas Subjetivas',
+      objective: 'Estruturar o estudo sobre contradições, bloqueios e distinção entre planos internos.',
+      topics: [
+        'Contradições',
+        'Bloqueios',
+        'Sentimentos, pensamentos e intenções',
+        'Viés de confirmação',
+      ],
+    },
+    {
+      theme: 'Polaridades, Inversões e Conduta Ética',
+      objective: 'Organizar o estudo sobre cartas invertidas, modulação energética e ética profissional.',
+      topics: [
+        'Cartas invertidas',
+        'Energia bloqueada e excessiva',
+        'Ética na leitura',
+      ],
+    },
+  ];
+  mod4Days.forEach((d) => addDay({ moduleId: 4, ...d }));
+
+  // Dia de revisão da Etapa I (Módulos 1 a 4)
+  addDay({
+    moduleId: 4,
+    theme: 'Revisão Consolidada — Etapa I (Fundamentos e Sistemas)',
+    objective: 'Revisar todos os tópicos dos Módulos 1 a 4 antes de iniciar os Arcanos Maiores.',
+    isReview: true,
+    topics: [
+      'Revisão das escolas históricas e estrutura dos 78 arcanos',
+      'Revisão das correspondências de Cabala, Astrologia, Numerologia e Alquimia',
+      'Revisão dos conceitos de Psicologia Analítica e Simbolismo',
+      'Revisão das diretrizes de formulação de perguntas e ética na cartomancia',
+    ],
+  });
+
+  // --------------------------------------------------------------------------
+  // MÓDULOS 5 A 8 — ARCANOS MAIORES (22 cartas x 5 dias = 110 dias + revisões)
+  // --------------------------------------------------------------------------
+  const majorGroups: { moduleId: number; indices: number[]; reviewTitle: string }[] = [
+    { moduleId: 5, indices: [0, 1, 2, 3, 4, 5], reviewTitle: 'Revisão do Módulo 5 — Arcanos 0 ao V' },
+    { moduleId: 6, indices: [6, 7, 8, 9, 10, 11], reviewTitle: 'Revisão do Módulo 6 — Arcanos VI ao XI' },
+    { moduleId: 7, indices: [12, 13, 14, 15, 16], reviewTitle: 'Revisão do Módulo 7 — Arcanos XII ao XVI' },
+    { moduleId: 8, indices: [17, 18, 19, 20, 21], reviewTitle: 'Revisão do Módulo 8 — Arcanos XVII ao XXI' },
+  ];
+
+  const topicChunks40 = chunkArray(FORTY_CARD_TOPICS, 8); // 5 grupos de 8 tópicos = 40 tópicos exatos
+
+  majorGroups.forEach((group) => {
+    group.indices.forEach((majIdx) => {
+      const card = MAJOR_ARCANA_LIST[majIdx];
+      topicChunks40.forEach((chunk, partIdx) => {
+        const subtheme = FIVE_DAY_CARD_SUBTHEMES[partIdx];
+        addDay({
+          moduleId: group.moduleId,
+          theme: `Arcano ${card.num} — ${card.name} (${subtheme.label})`,
+          objective: subtheme.objective,
+          cardId: card.id,
+          topics: chunk,
+        });
+      });
+    });
+
+    // Dia de revisão ao final de cada módulo de Arcanos Maiores
+    const groupCardsNames = group.indices
+      .map((i) => `${MAJOR_ARCANA_LIST[i].num} - ${MAJOR_ARCANA_LIST[i].name}`)
+      .join(', ');
+    addDay({
+      moduleId: group.moduleId,
+      theme: group.reviewTitle,
+      objective: 'Consolidar comparativamente os Arcanos Maiores estudados neste módulo.',
+      isReview: true,
+      topics: [
+        `Síntese comparativa das cartas: ${groupCardsNames}`,
+        'Revisão das correspondências astrológicas, cabalísticas e numerológicas do bloco',
+        'Revisão das dinâmicas de combinação entre os arcanos deste módulo',
+      ],
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // MÓDULOS 9 A 12 — ARCANOS MENORES (Estudo do Naipe + 10 Cartas x 5 dias cada)
+  // --------------------------------------------------------------------------
+  const minorModules: { moduleId: number; suitKey: Exclude<SuitType, 'major'>; suitLabel: string; prefix: string }[] = [
+    { moduleId: 9, suitKey: 'wands', suitLabel: 'Paus', prefix: 'wands' },
+    { moduleId: 10, suitKey: 'cups', suitLabel: 'Copas', prefix: 'cups' },
+    { moduleId: 11, suitKey: 'swords', suitLabel: 'Espadas', prefix: 'swords' },
+    { moduleId: 12, suitKey: 'pentacles', suitLabel: 'Ouros', prefix: 'pent' },
+  ];
+
+  minorModules.forEach((mSuit) => {
+    // 2 dias dedicados ao estudo geral do naipe (10 tópicos divididos em 5 + 5)
+    addDay({
+      moduleId: mSuit.moduleId,
+      theme: `Estudo Geral do Naipe de ${mSuit.suitLabel} — Parte 1: Estrutura e Simbolismo`,
+      objective: `Organizar os fundamentos elementais, numerológicos e simbólicos do naipe de ${mSuit.suitLabel}.`,
+      topics: SUIT_OVERVIEW_TOPICS.slice(0, 5),
+    });
+    addDay({
+      moduleId: mSuit.moduleId,
+      theme: `Estudo Geral do Naipe de ${mSuit.suitLabel} — Parte 2: Esferas da Vida e Combinações`,
+      objective: `Mapear as aplicações temáticas e padrões de combinação do naipe de ${mSuit.suitLabel}.`,
+      topics: SUIT_OVERVIEW_TOPICS.slice(5, 10),
+    });
+
+    // Estudo individual das 10 cartas numeradas do naipe (Ás ao 10) - 40 tópicos em 5 dias por carta
+    PIP_NAMES.forEach((pip, idx) => {
+      const cardId = `${mSuit.prefix}-${idx + 1}`;
+      const cardFullName = `${pip.label} de ${mSuit.suitLabel}`;
+
+      topicChunks40.forEach((chunk, partIdx) => {
+        const subtheme = FIVE_DAY_CARD_SUBTHEMES[partIdx];
+        addDay({
+          moduleId: mSuit.moduleId,
+          theme: `${cardFullName} (${subtheme.label})`,
+          objective: subtheme.objective,
+          cardId,
+          topics: chunk,
+        });
+      });
+    });
+
+    // Revisão do Naipe
+    addDay({
+      moduleId: mSuit.moduleId,
+      theme: `Revisão Progressiva — Naipe de ${mSuit.suitLabel} (Ás ao 10)`,
+      objective: `Revisar a progressão numérica do Ás ao Dez no naipe de ${mSuit.suitLabel}.`,
+      isReview: true,
+      topics: [
+        `Progressão numerológica do Ás ao 10 de ${mSuit.suitLabel}`,
+        `Revisão das correspondências decanais e elementais de ${mSuit.suitLabel}`,
+        `Revisão de combinações internas do naipe de ${mSuit.suitLabel}`,
+      ],
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // MÓDULO 13 — CARTAS DA CORTE (16 figuras x 3 dias exclusivos cada = 48 dias + revisão)
+  // --------------------------------------------------------------------------
+  const courtSubthemes = [
+    {
+      label: 'Parte 1 — Arquétipo, Maturidade e Temperamento',
+      objective: 'Organizar o estudo da identidade arquetípica, maturidade simbólica e perfil comportamental da figura.',
+    },
+    {
+      label: 'Parte 2 — Afetividade, Sexualidade e Dinâmicas Relacionais',
+      objective: 'Mapear os tópicos referentes aos vínculos emocionais, intenções e expressão afetiva da carta da corte.',
+    },
+    {
+      label: 'Parte 3 — Esfera Espiritual, Material, Sombra e Combinações',
+      objective: 'Estruturar a análise espiritual, profissional, aspectos sombrios, inversões e combinações.',
+    },
+  ];
+
+  // Dividir os 17 tópicos em 3 blocos: 6 + 5 + 6 = 17 tópicos
+  const courtTopicChunks = [
+    COURT_CARD_TOPICS.slice(0, 6),
+    COURT_CARD_TOPICS.slice(6, 11),
+    COURT_CARD_TOPICS.slice(11, 17),
+  ];
+
+  SUITS_META.forEach((suit) => {
+    COURT_NAMES.forEach((court, idx) => {
+      const cardId = `${suit.prefix}-court-${idx + 1}`;
+      const cardFullName = `${court.label} de ${suit.label}`;
+
+      courtTopicChunks.forEach((chunk, partIdx) => {
+        addDay({
+          moduleId: 13,
+          theme: `${cardFullName} (${courtSubthemes[partIdx].label})`,
+          objective: courtSubthemes[partIdx].objective,
+          cardId,
+          topics: chunk,
+        });
+      });
+    });
+  });
+
+  addDay({
+    moduleId: 13,
+    theme: 'Revisão Comparativa — As 16 Cartas da Corte',
+    objective: 'Comparar hierarquias (Pajens, Cavaleiros, Rainhas, Reis) e combinações elementais da corte.',
+    isReview: true,
+    topics: [
+      'Comparativo horizontal por hierarquia: Pajens, Cavaleiros, Rainhas e Reis',
+      'Comparativo vertical por naipe: Paus, Copas, Espadas e Ouros',
+      'Revisão da identificação de perfis psicológicos e pessoas em tiragens',
+    ],
+  });
+
+  // --------------------------------------------------------------------------
+  // MÓDULO 14 — INTERPRETAÇÃO AVANÇADA (18 tópicos em 4 dias)
+  // --------------------------------------------------------------------------
+  const mod14Days: { theme: string; objective: string; topics: string[] }[] = [
+    {
+      theme: 'Dinâmicas de Combinação por Quantidade e Naipe',
+      objective: 'Organizar o estudo técnico de agrupamentos de múltiplas cartas e predominância elemental.',
+      topics: [
+        'Combinações de duas cartas',
+        'Combinações de três cartas',
+        'Combinações de quatro ou mais cartas',
+        'Combinações por naipe',
+        'Combinações entre elementos',
+      ],
+    },
+    {
+      theme: 'Modificadores, Reforços e Tensões Narrativas',
+      objective: 'Mapear como cartas vizinhas alteram, intensificam ou contradizem o sentido de uma lâmina.',
+      topics: [
+        'Contradições',
+        'Confirmações',
+        'Intensificações',
+        'Cartas que modificam outras',
+      ],
+    },
+    {
+      theme: 'Representação de Pessoas, Perfis e Aparência',
+      objective: 'Estruturar critérios organizacionais para leitura de sujeitos e características individuais.',
+      topics: [
+        'Cartas da corte representando pessoas',
+        'Identificação de pessoas em tiragens',
+        'Interpretação de personalidade',
+        'Interpretação de aparência',
+      ],
+    },
+    {
+      theme: 'Leitura de Acontecimentos, Subtextos e Esferas Específicas',
+      objective: 'Organizar o estudo de eventos objetivos, camadas ocultas e recortes temáticos.',
+      topics: [
+        'Interpretação de acontecimentos',
+        'Interpretação de segredos',
+        'Interpretação de sentimentos ocultos',
+        'Interpretações sexuais',
+        'Interpretações espirituais',
+      ],
+    },
+  ];
+  mod14Days.forEach((d) => addDay({ moduleId: 14, ...d }));
+
+  // --------------------------------------------------------------------------
+  // MÓDULO 15 — SEXUALIDADE NO TAROT (18 tópicos em 4 dias)
+  // --------------------------------------------------------------------------
+  const mod15Days: { theme: string; objective: string; topics: string[] }[] = [
+    {
+      theme: 'Desejo, Atração e Expressão Erótica',
+      objective: 'Organizar o levantamento dos indicadores simbólicos de atração, libido e fantasias.',
+      topics: [
+        'Libido',
+        'Desejo',
+        'Atração física',
+        'Atração emocional',
+        'Fantasias',
+        'Fetiches',
+      ],
+    },
+    {
+      theme: 'Dinâmicas de Polaridade, Sedução e Poder',
+      objective: 'Mapear os tópicos relativos à condução, receptividade e assimetrias simbólicas.',
+      topics: [
+        'Sedução',
+        'Dominância',
+        'Submissão',
+        'Dinâmicas de poder',
+        'Iniciativa e receptividade',
+      ],
+    },
+    {
+      theme: 'Intimidade, Bloqueios e Vulnerabilidades',
+      objective: 'Estruturar a análise de abertura emocional, travas e inseguranças íntimas.',
+      topics: [
+        'Intimidade',
+        'Bloqueios',
+        'Inseguranças',
+      ],
+    },
+    {
+      theme: 'Contextos Relacionais e Compatibilidade Sexual',
+      objective: 'Organizar o estudo de diferentes configurações de vínculo e combinações específicas.',
+      topics: [
+        'Sexualidade casual',
+        'Sexualidade em relacionamentos',
+        'Compatibilidade sexual',
+        'Combinações sexuais',
+      ],
+    },
+  ];
+  mod15Days.forEach((d) => addDay({ moduleId: 15, ...d }));
+
+  // --------------------------------------------------------------------------
+  // MÓDULO 16 — ESPIRITUALIDADE NO TAROT (19 tópicos em 4 dias)
+  // --------------------------------------------------------------------------
+  const mod16Days: { theme: string; objective: string; topics: string[] }[] = [
+    {
+      theme: 'Panteões, Mitologia e Hierarquias Ocultistas',
+      objective: 'Organizar a pesquisa sobre correspondências mitológicas e entidades na literatura ocultista.',
+      topics: [
+        'Correspondências com divindades',
+        'Mitologia',
+        'Arquétipos espirituais',
+        'Anjos',
+        'Demônios na literatura ocultista',
+        'Guias espirituais como interpretações simbólicas',
+      ],
+    },
+    {
+      theme: 'Percepção Sutil, Sonhos e Desenvolvimento',
+      objective: 'Mapear os tópicos associados à intuição, mediunidade e higiene energética simbólica.',
+      topics: [
+        'Mediunidade',
+        'Intuição',
+        'Sonhos',
+        'Proteção espiritual',
+        'Desenvolvimento espiritual',
+      ],
+    },
+    {
+      theme: 'Tradições Mágicas e Práticas Rituais',
+      objective: 'Estruturar o levantamento comparativo entre magia cerimonial, bruxaria e rituais.',
+      topics: [
+        'Magia cerimonial',
+        'Bruxaria',
+        'Rituais',
+      ],
+    },
+    {
+      theme: 'Correspondências Naturais e Fronteiras Religiosas',
+      objective: 'Consolidar tabelas de ervas, cristais, elementos, planetas e distinções doutrinárias.',
+      topics: [
+        'Ervas',
+        'Cristais',
+        'Elementos',
+        'Planetas',
+        'Diferenças entre Tarot e tradições religiosas',
+      ],
+    },
+  ];
+  mod16Days.forEach((d) => addDay({ moduleId: 16, ...d }));
+
+  // --------------------------------------------------------------------------
+  // MÓDULO 17 — TIRAGENS E PRÁTICA (20 tópicos em 5 dias + Revisão Final)
+  // --------------------------------------------------------------------------
+  const mod17Days: { theme: string; objective: string; topics: string[] }[] = [
+    {
+      theme: 'Estruturas Fundamentais de Tiragem (1 e 3 Cartas)',
+      objective: 'Organizar o estudo prático das tiragens essenciais de síntese e tríades.',
+      topics: [
+        'Tiragem de uma carta',
+        'Tiragem de três cartas',
+        'Passado, presente e futuro',
+        'Situação, obstáculo e conselho',
+        'Pensamentos, sentimentos e intenções',
+      ],
+    },
+    {
+      theme: 'Tiragens Temáticas Direcionadas',
+      objective: 'Mapear esquemas específicos para leitura amorosa, sexual, profissional e espiritual.',
+      topics: [
+        'Tiragem amorosa',
+        'Tiragem sexual',
+        'Tiragem profissional',
+        'Tiragem espiritual',
+      ],
+    },
+    {
+      theme: 'Tiragens Panorâmicas e Estruturas Complexas',
+      objective: 'Estruturar a montagem e leitura posicional da Cruz Celta e da Mandala Astrológica.',
+      topics: [
+        'Cruz Celta',
+        'Mandala astrológica',
+      ],
+    },
+    {
+      theme: 'Tiragens Especializadas e Recursos Técnicos',
+      objective: 'Organizar o uso de cartas significadoras, fundo do baralho e cartas de clarificação.',
+      topics: [
+        'Tiragens temporais',
+        'Tiragens de personalidade',
+        'Tiragens de compatibilidade',
+        'Cartas significadoras',
+        'Cartas de fundo',
+        'Clarificação',
+      ],
+    },
+    {
+      theme: 'Sistematização da Prática e Estudos de Caso',
+      objective: 'Estabelecer a rotina de registro analítico, estudos de caso e revisão crítica.',
+      topics: [
+        'Estudos de caso',
+        'Diário de tiragens',
+        'Revisão das leituras',
+      ],
+    },
+  ];
+  mod17Days.forEach((d) => addDay({ moduleId: 17, ...d }));
+
+  addDay({
+    moduleId: 17,
+    theme: 'Revisão Geral de Encerramento da Formação',
+    objective: 'Revisão panorâmica de todos os 17 módulos e integração metodológica final.',
+    isReview: true,
+    topics: [
+      'Integração entre fundamentos históricos, sistemas esotéricos e psicologia simbólica',
+      'Síntese comparativa dos 22 Arcanos Maiores, 40 Arcanos Menores e 16 Cartas da Corte',
+      'Revisão dos protocolos de combinação, ética e condução de tiragens complexas',
+    ],
+  });
+
+  return days;
+}
+
+// ============================================================================
+// UTILITÁRIOS DE DATA, PERSISTÊNCIA E CÁLCULO DE CRONOGRAMA
+// ============================================================================
+
+const STORAGE_KEY = 'tarot_study_planner_v1';
+
+function getTodayISO(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function formatDatePTBR(isoDate?: string): string {
+  if (!isoDate) return '—';
+  const [y, m, d] = isoDate.split('-');
+  if (!y || !m || !d) return isoDate;
+  return `${d}/${m}/${y}`;
+}
+
+function formatFullDateHeader(): string {
+  const now = new Date();
+  return now.toLocaleDateString('pt-BR', {
+    weekday: 'long',
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+  });
+}
+
+/**
+ * Calcula a data prevista de um dia de estudo (índice 0-based)
+ * com base na data de início e quantos dias por semana a usuária estuda.
+ */
+function calculateScheduledDateForDayIndex(
+  dayIndex: number,
+  startDateISO: string,
+  daysPerWeek: number
+): string {
+  const safeDaysPerWeek = Math.max(1, Math.min(7, daysPerWeek || 5));
+  const [y, m, d] = startDateISO.split('-').map(Number);
+  const start = new Date(y, (m || 1) - 1, d || 1);
+
+  if (safeDaysPerWeek === 7) {
+    start.setDate(start.getDate() + dayIndex);
+  } else {
+    // Distribui N dias por semana (ex: 5 dias -> Seg a Sex; 3 dias -> Seg, Qua, Sex, etc.)
+    const activeWeekdaysMap: Record<number, number[]> = {
+      1: [1], // Seg
+      2: [1, 4], // Seg, Qui
+      3: [1, 3, 5], // Seg, Qua, Sex
+      4: [1, 2, 4, 5], // Seg, Ter, Qui, Sex
+      5: [1, 2, 3, 4, 5], // Seg a Sex
+      6: [1, 2, 3, 4, 5, 6], // Seg a Sáb
+    };
+    const allowedDays = activeWeekdaysMap[safeDaysPerWeek] || [1, 2, 3, 4, 5];
+    let current = new Date(start);
+    let counted = 0;
+
+    // Avança até encontrar o primeiro dia permitido a partir da data inicial
+    while (!allowedDays.includes(current.getDay())) {
+      current.setDate(current.getDate() + 1);
+    }
+
+    while (counted < dayIndex) {
+      current.setDate(current.getDate() + 1);
+      if (allowedDays.includes(current.getDay())) {
+        counted++;
+      }
+    }
+    start.setTime(current.getTime());
+  }
+
+  const ry = start.getFullYear();
+  const rm = String(start.getMonth() + 1).padStart(2, '0');
+  const rd = String(start.getDate()).padStart(2, '0');
+  return `${ry}-${rm}-${rd}`;
+}
+
+function createInitialState(): PlannerState {
+  const initialDays = generateFullCurriculum();
+  return {
+    days: initialDays,
+    favorites: [],
+    dayNotes: {},
+    cardDates: {},
+    notes: [],
+    settings: {
+      userName: 'Estudante',
+      startDate: getTodayISO(),
+      daysPerWeek: 5,
+      targetPaceLabel: 'Ritmo Aprofundado (Acadêmico)',
+      visualReminders: true,
+    },
+    activityLog: {},
+    lastVisitedDayId: initialDays[0]?.id || 'day-001',
+  };
+}
+
+function loadPlannerState(): PlannerState {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return createInitialState();
+    const parsed = JSON.parse(raw) as PlannerState;
+    if (!parsed.days || !Array.isArray(parsed.days) || parsed.days.length === 0) {
+      return createInitialState();
+    }
+    return {
+      ...createInitialState(),
+      ...parsed,
+      settings: {
+        ...createInitialState().settings,
+        ...(parsed.settings || {}),
+      },
+    };
+  } catch {
+    return createInitialState();
+  }
+}
+
+// ============================================================================
+// ELEMENTOS VISUAIS SUTIS (ORNAMENTOS ESOTÉRICOS MINIMALISTAS)
+// ============================================================================
+
+const EsotericDivider: React.FC<{ className?: string }> = ({ className = '' }) => (
+  <div className={`flex items-center justify-center gap-3 my-4 opacity-70 ${className}`} aria-hidden="true">
+    <span className="h-px flex-1 bg-gradient-to-r from-transparent via-[#E9A9C3] to-[#D77FA5]/40" />
+    <Sparkles className="w-3.5 h-3.5 text-[#D77FA5]" />
+    <Moon className="w-3 h-3 text-[#A94F79]" />
+    <Sparkles className="w-3.5 h-3.5 text-[#D77FA5]" />
+    <span className="h-px flex-1 bg-gradient-to-l from-transparent via-[#E9A9C3] to-[#D77FA5]/40" />
+  </div>
+);
+
+const CelestialBadge: React.FC<{ children: React.ReactNode; variant?: 'soft' | 'accent' | 'outline' }> = ({
+  children,
+  variant = 'soft',
+}) => {
+  const styles = {
+    soft: 'bg-[#F8DCE8]/80 text-[#A94F79] border border-[#E9A9C3]/50',
+    accent: 'bg-[#D77FA5] text-white border border-[#D77FA5]',
+    outline: 'bg-white text-[#51434B] border border-[#F8DCE8]',
+  };
+  return (
+    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium tracking-wide ${styles[variant]}`}>
+      {children}
+    </span>
+  );
+};
+
+// ============================================================================
+// APLICAÇÃO PRINCIPAL
+// ============================================================================
+
+export function App() {
+  const [state, setState] = useState<PlannerState>(() => loadPlannerState());
+  const [activePage, setActivePage] = useState<PageRoute>('dashboard');
+  const [selectedDayId, setSelectedDayId] = useState<string>(() => loadPlannerState().lastVisitedDayId || 'day-001');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Salvar automaticamente no localStorage sempre que o estado mudar
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch (e) {
+      console.error('Erro ao salvar no localStorage:', e);
+    }
+  }, [state]);
+
+  const showToast = useCallback((msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => {
+      setToastMessage((prev) => (prev === msg ? null : prev));
+    }, 3000);
+  }, []);
+
+  // ==========================================================================
+  // MÉTRICAS CALCULADAS EM TEMPO REAL (ZERO PROGRESSO FICTÍCIO)
+  // ==========================================================================
+
+  const metrics = useMemo(() => {
+    const totalDays = state.days.length;
+    let completedDaysCount = 0;
+    let totalTasks = 0;
+    let completedTasks = 0;
+
+    // Mapas por módulo e por carta
+    const moduleStats: Record<
+      number,
+      { totalDays: number; completedDays: number; totalTasks: number; completedTasks: number }
+    > = {};
+
+    MODULES_CATALOG.forEach((m) => {
+      moduleStats[m.id] = { totalDays: 0, completedDays: 0, totalTasks: 0, completedTasks: 0 };
+    });
+
+    const cardTaskStats: Record<
+      string,
+      { totalTasks: number; completedTasks: number; dayIds: string[] }
+    > = {};
+
+    ALL_78_CARDS.forEach((c) => {
+      cardTaskStats[c.id] = { totalTasks: 0, completedTasks: 0, dayIds: [] };
+    });
+
+    state.days.forEach((day) => {
+      const dayTotal = day.tasks.length;
+      const dayDone = day.tasks.filter((t) => t.completed).length;
+      const isDayComplete = dayTotal > 0 && dayDone === dayTotal;
+
+      totalTasks += dayTotal;
+      completedTasks += dayDone;
+      if (isDayComplete) completedDaysCount++;
+
+      if (moduleStats[day.moduleId]) {
+        moduleStats[day.moduleId].totalDays += 1;
+        if (isDayComplete) moduleStats[day.moduleId].completedDays += 1;
+        moduleStats[day.moduleId].totalTasks += dayTotal;
+        moduleStats[day.moduleId].completedTasks += dayDone;
+      }
+
+      if (day.cardId && cardTaskStats[day.cardId]) {
+        cardTaskStats[day.cardId].totalTasks += dayTotal;
+        cardTaskStats[day.cardId].completedTasks += dayDone;
+        cardTaskStats[day.cardId].dayIds.push(day.id);
+      }
+    });
+
+    const overallPercentage =
+      totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 1000) / 10 : 0;
+
+    const completedModulesCount = Object.values(moduleStats).filter(
+      (m) => m.totalDays > 0 && m.completedDays === m.totalDays
+    ).length;
+
+    const studiedCardsCount = Object.values(cardTaskStats).filter(
+      (c) => c.totalTasks > 0 && c.completedTasks === c.totalTasks
+    ).length;
+
+    const inProgressCardsCount = Object.values(cardTaskStats).filter(
+      (c) => c.completedTasks > 0 && c.completedTasks < c.totalTasks
+    ).length;
+
+    // Primeiro dia não concluído (para "Estudo de hoje" / "Continuar de onde parou")
+    const nextUnfinishedDayIndex = state.days.findIndex((d) =>
+      d.tasks.some((t) => !t.completed)
+    );
+    const currentStudyDayIndex =
+      nextUnfinishedDayIndex === -1 ? 0 : nextUnfinishedDayIndex;
+    const currentStudyDay = state.days[currentStudyDayIndex] || state.days[0];
+
+    // Cálculo de Streak (dias consecutivos com atividade no activityLog)
+    const activeDates = Object.keys(state.activityLog)
+      .filter((d) => (state.activityLog[d]?.tasksCompleted || 0) > 0)
+      .sort();
+
+    let currentStreak = 0;
+    if (activeDates.length > 0) {
+      const todayStr = getTodayISO();
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yStr = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(
+        2,
+        '0'
+      )}-${String(yesterday.getDate()).padStart(2, '0')}`;
+
+      const lastActive = activeDates[activeDates.length - 1];
+      if (lastActive === todayStr || lastActive === yStr) {
+        currentStreak = 1;
+        let checkDate = new Date(lastActive + 'T12:00:00');
+        while (true) {
+          checkDate.setDate(checkDate.getDate() - 1);
+          const prevStr = `${checkDate.getFullYear()}-${String(
+            checkDate.getMonth() + 1
+          ).padStart(2, '0')}-${String(checkDate.getDate()).padStart(2, '0')}`;
+          if (state.activityLog[prevStr]?.tasksCompleted > 0) {
+            currentStreak++;
+          } else {
+            break;
+          }
+        }
+      }
+    }
+
+    return {
+      totalDays,
+      completedDaysCount,
+      totalTasks,
+      completedTasks,
+      overallPercentage,
+      completedModulesCount,
+      studiedCardsCount,
+      inProgressCardsCount,
+      currentStudyDay,
+      currentStudyDayIndex,
+      currentStreak,
+      moduleStats,
+      cardTaskStats,
+    };
+  }, [state.days, state.activityLog]);
+
+  // ==========================================================================
+  // AÇÕES DE INTERAÇÃO (CHECKLISTS, CONCLUSÃO DE DIA, REORDENAÇÃO, ETC.)
+  // ==========================================================================
+
+  const toggleTask = useCallback((dayId: string, taskId: string) => {
+    const today = getTodayISO();
+    setState((prev) => {
+      let deltaTasks = 0;
+      let deltaDays = 0;
+      let affectedCardId: string | undefined;
+
+      const updatedDays = prev.days.map((day) => {
+        if (day.id !== dayId) return day;
+        affectedCardId = day.cardId;
+        const wasComplete = day.tasks.every((t) => t.completed);
+
+        const updatedTasks = day.tasks.map((task) => {
+          if (task.id !== taskId) return task;
+          const nextCompleted = !task.completed;
+          deltaTasks = nextCompleted ? 1 : -1;
+          return {
+            ...task,
+            completed: nextCompleted,
+            completedAt: nextCompleted ? today : undefined,
+          };
+        });
+
+        const isNowComplete = updatedTasks.every((t) => t.completed);
+        if (!wasComplete && isNowComplete) deltaDays = 1;
+        if (wasComplete && !isNowComplete) deltaDays = -1;
+
+        return { ...day, tasks: updatedTasks };
+      });
+
+      // Atualizar datas da carta vinculada
+      const updatedCardDates = { ...prev.cardDates };
+      if (affectedCardId) {
+        const cardDays = updatedDays.filter((d) => d.cardId === affectedCardId);
+        const allCardTasks = cardDays.flatMap((d) => d.tasks);
+        const doneCount = allCardTasks.filter((t) => t.completed).length;
+        const existing = updatedCardDates[affectedCardId] || {};
+
+        if (doneCount === 0) {
+          delete updatedCardDates[affectedCardId];
+        } else if (doneCount === allCardTasks.length) {
+          updatedCardDates[affectedCardId] = {
+            startedAt: existing.startedAt || today,
+            completedAt: today,
+          };
+        } else {
+          updatedCardDates[affectedCardId] = {
+            startedAt: existing.startedAt || today,
+            completedAt: undefined,
+          };
+        }
+      }
+
+      // Atualizar log de atividade
+      const updatedLog = { ...prev.activityLog };
+      const currentEntry = updatedLog[today] || {
+        date: today,
+        tasksCompleted: 0,
+        daysCompleted: 0,
+      };
+      updatedLog[today] = {
+        date: today,
+        tasksCompleted: Math.max(0, currentEntry.tasksCompleted + deltaTasks),
+        daysCompleted: Math.max(0, currentEntry.daysCompleted + deltaDays),
+      };
+
+      return {
+        ...prev,
+        days: updatedDays,
+        cardDates: updatedCardDates,
+        activityLog: updatedLog,
+      };
+    });
+  }, []);
+
+  const toggleDayCompletion = useCallback(
+    (dayId: string) => {
+      const today = getTodayISO();
+      setState((prev) => {
+        const targetDay = prev.days.find((d) => d.id === dayId);
+        if (!targetDay) return prev;
+
+        const isCurrentlyComplete = targetDay.tasks.every((t) => t.completed);
+        const nextStatus = !isCurrentlyComplete;
+        const deltaTasks = nextStatus
+          ? targetDay.tasks.filter((t) => !t.completed).length
+          : -targetDay.tasks.length;
+        const deltaDays = nextStatus ? 1 : -1;
+
+        const updatedDays = prev.days.map((day) => {
+          if (day.id !== dayId) return day;
+          return {
+            ...day,
+            tasks: day.tasks.map((t) => ({
+              ...t,
+              completed: nextStatus,
+              completedAt: nextStatus ? t.completedAt || today : undefined,
+            })),
+          };
+        });
+
+        // Atualizar datas da carta vinculada
+        const updatedCardDates = { ...prev.cardDates };
+        if (targetDay.cardId) {
+          const cardDays = updatedDays.filter((d) => d.cardId === targetDay.cardId);
+          const allCardTasks = cardDays.flatMap((d) => d.tasks);
+          const doneCount = allCardTasks.filter((t) => t.completed).length;
+          const existing = updatedCardDates[targetDay.cardId] || {};
+
+          if (doneCount === 0) {
+            delete updatedCardDates[targetDay.cardId];
+          } else if (doneCount === allCardTasks.length) {
+            updatedCardDates[targetDay.cardId] = {
+              startedAt: existing.startedAt || today,
+              completedAt: today,
+            };
+          } else {
+            updatedCardDates[targetDay.cardId] = {
+              startedAt: existing.startedAt || today,
+              completedAt: undefined,
+            };
+          }
+        }
+
+        const updatedLog = { ...prev.activityLog };
+        const currentEntry = updatedLog[today] || {
+          date: today,
+          tasksCompleted: 0,
+          daysCompleted: 0,
+        };
+        updatedLog[today] = {
+          date: today,
+          tasksCompleted: Math.max(0, currentEntry.tasksCompleted + deltaTasks),
+          daysCompleted: Math.max(0, currentEntry.daysCompleted + deltaDays),
+        };
+
+        return {
+          ...prev,
+          days: updatedDays,
+          cardDates: updatedCardDates,
+          activityLog: updatedLog,
+        };
+      });
+
+      showToast('Status do dia atualizado.');
+    },
+    [showToast]
+  );
+
+  const toggleFavoriteDay = useCallback((dayId: string) => {
+    setState((prev) => {
+      const exists = prev.favorites.includes(dayId);
+      const nextFavs = exists
+        ? prev.favorites.filter((id) => id !== dayId)
+        : [...prev.favorites, dayId];
+      return { ...prev, favorites: nextFavs };
+    });
+  }, []);
+
+  const moveDayOrder = useCallback(
+    (dayId: string, direction: 'up' | 'down') => {
+      setState((prev) => {
+        const idx = prev.days.findIndex((d) => d.id === dayId);
+        if (idx === -1) return prev;
+        const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+        if (swapIdx < 0 || swapIdx >= prev.days.length) return prev;
+
+        // Só permite reordenar dentro do mesmo módulo para manter a integridade pedagógica
+        if (prev.days[idx].moduleId !== prev.days[swapIdx].moduleId) {
+          showToast('A reordenação ocorre dentro do mesmo módulo.');
+          return prev;
+        }
+
+        const nextDays = [...prev.days];
+        const temp = nextDays[idx];
+        nextDays[idx] = nextDays[swapIdx];
+        nextDays[swapIdx] = temp;
+
+        // Renumerar sequencialmente Dia 01, Dia 02...
+        const renumbered = nextDays.map((d, i) => ({
+          ...d,
+          dayNumber: i + 1,
+        }));
+
+        return { ...prev, days: renumbered };
+      });
+    },
+    [showToast]
+  );
+
+  const moveTaskOrder = useCallback((dayId: string, taskId: string, direction: 'up' | 'down') => {
+    setState((prev) => {
+      const updatedDays = prev.days.map((day) => {
+        if (day.id !== dayId) return day;
+        const tIdx = day.tasks.findIndex((t) => t.id === taskId);
+        if (tIdx === -1) return day;
+        const swapIdx = direction === 'up' ? tIdx - 1 : tIdx + 1;
+        if (swapIdx < 0 || swapIdx >= day.tasks.length) return day;
+
+        const nextTasks = [...day.tasks];
+        const tmp = nextTasks[tIdx];
+        nextTasks[tIdx] = nextTasks[swapIdx];
+        nextTasks[swapIdx] = tmp;
+        return { ...day, tasks: nextTasks };
+      });
+      return { ...prev, days: updatedDays };
+    });
+  }, []);
+
+  const openDailyStudy = useCallback((dayId: string) => {
+    setSelectedDayId(dayId);
+    setState((prev) => ({ ...prev, lastVisitedDayId: dayId }));
+    setActivePage('daily');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
+  const saveDayNotes = useCallback(
+    (dayId: string, personal: string, observations: string) => {
+      setState((prev) => ({
+        ...prev,
+        dayNotes: {
+          ...prev.dayNotes,
+          [dayId]: { personal, observations },
+        },
+      }));
+      showToast('Anotações e progresso salvos.');
+    },
+    [showToast]
+  );
+
+  // ==========================================================================
+  // NAVEGAÇÃO LATERAL E HEADER
+  // ==========================================================================
+
+  const navItems: { id: PageRoute; label: string; icon: React.ReactNode; badge?: string }[] = [
+    { id: 'dashboard', label: 'Dashboard', icon: <Compass className="w-4 h-4" /> },
+    { id: 'schedule', label: 'Cronograma Completo', icon: <CalendarIcon className="w-4 h-4" />, badge: `${state.days.length}d` },
+    { id: 'daily', label: 'Estudo Diário', icon: <BookOpen className="w-4 h-4" /> },
+    { id: 'library', label: 'Biblioteca de Cartas', icon: <Layers className="w-4 h-4" />, badge: '78' },
+    { id: 'progress', label: 'Meu Progresso', icon: <BarChart3 className="w-4 h-4" /> },
+    { id: 'notes', label: 'Anotações', icon: <FileText className="w-4 h-4" /> },
+    { id: 'settings', label: 'Configurações', icon: <SettingsIcon className="w-4 h-4" /> },
+  ];
+
+  return (
+    <div className="min-h-screen bg-[#FFF4F8] text-[#51434B] flex flex-col lg:flex-row selection:bg-[#E9A9C3] selection:text-white">
+      {/* Importação de Fontes Elegantes */}
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+        
+        body {
+          font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+          background-color: #FFF4F8;
+          color: #51434B;
+        }
+        .font-serif-editorial {
+          font-family: 'Cormorant Garamond', Georgia, serif;
+        }
+        /* Scrollbar delicada */
+        ::-webkit-scrollbar {
+          width: 6px;
+          height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+          background: #FFF4F8;
+        }
+        ::-webkit-scrollbar-thumb {
+          background: #E9A9C3;
+          border-radius: 9999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+          background: #D77FA5;
+        }
+      `}</style>
+
+      {/* Toast discreto */}
+      {toastMessage && (
+        <div className="fixed bottom-5 right-5 z-50 bg-[#A94F79] text-white px-4 py-3 rounded-2xl shadow-lg shadow-[#A94F79]/20 flex items-center gap-2.5 text-sm animate-fade-in">
+          <Sparkles className="w-4 h-4 text-[#F8DCE8]" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
+      {/* Header Mobile */}
+      <header className="lg:hidden sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-[#F8DCE8] px-4 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-full bg-[#FFF4F8] border border-[#E9A9C3] flex items-center justify-center text-[#A94F79]">
+            <Moon className="w-4 h-4" />
+          </div>
+          <div>
+            <h1 className="font-serif-editorial text-xl font-bold text-[#A94F79] leading-none">
+              Tarot Study Planner
+            </h1>
+            <p className="text-[11px] text-[#51434B]/70 mt-0.5">Formação Acadêmica Estruturada</p>
+          </div>
+        </div>
+        <button
+          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          className="p-2.5 rounded-xl bg-[#FFF4F8] text-[#A94F79] border border-[#F8DCE8]"
+          aria-label="Abrir menu de navegação"
+        >
+          {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+        </button>
+      </header>
+
+      {/* Drawer Mobile */}
+      {mobileMenuOpen && (
+        <div className="lg:hidden fixed inset-0 z-40 bg-[#51434B]/30 backdrop-blur-xs" onClick={() => setMobileMenuOpen(false)}>
+          <div
+            className="w-72 h-full bg-white border-r border-[#F8DCE8] p-5 flex flex-col justify-between"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div>
+              <div className="flex items-center justify-between pb-4 border-b border-[#F8DCE8]">
+                <span className="font-serif-editorial text-2xl font-bold text-[#A94F79]">
+                  Tarot Planner
+                </span>
+                <button onClick={() => setMobileMenuOpen(false)} className="p-1.5 text-[#51434B]">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <nav className="mt-5 space-y-1.5">
+                {navItems.map((item) => {
+                  const active = activePage === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => {
+                        setActivePage(item.id);
+                        setMobileMenuOpen(false);
+                      }}
+                      className={`w-full flex items-center justify-between px-3.5 py-3 rounded-xl text-sm font-medium transition-all ${
+                        active
+                          ? 'bg-[#F8DCE8]/75 text-[#A94F79] shadow-xs'
+                          : 'text-[#51434B] hover:bg-[#FFF4F8]'
+                      }`}
+                    >
+                      <span className="flex items-center gap-3">
+                        <span className={active ? 'text-[#A94F79]' : 'text-[#D77FA5]'}>{item.icon}</span>
+                        {item.label}
+                      </span>
+                      {item.badge && (
+                        <span className="text-[11px] px-2 py-0.5 rounded-full bg-white text-[#A94F79] border border-[#F8DCE8]">
+                          {item.badge}
+                        </span>
+                      )}
                     </button>
+                  );
+                })}
+              </nav>
+            </div>
+            <div className="pt-4 border-t border-[#F8DCE8] text-xs text-[#51434B]/70">
+              Progresso Geral: <strong className="text-[#A94F79]">{metrics.overallPercentage}%</strong>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sidebar Desktop */}
+      <aside className="hidden lg:flex lg:w-72 lg:flex-col lg:fixed lg:inset-y-0 bg-white border-r border-[#F8DCE8] px-5 py-7 justify-between">
+        <div>
+          {/* Identidade do Planner */}
+          <div className="px-2">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#FFF4F8] to-[#F8DCE8] border border-[#E9A9C3] flex items-center justify-center text-[#A94F79] shadow-xs">
+                <Moon className="w-5 h-5" />
+              </div>
+              <div>
+                <span className="text-[10px] uppercase tracking-[0.2em] text-[#D77FA5] font-semibold block">
+                  Caderno Acadêmico
+                </span>
+                <h1 className="font-serif-editorial text-2xl font-bold text-[#A94F79] leading-tight">
+                  Tarot Study Planner
+                </h1>
+              </div>
+            </div>
+            <EsotericDivider />
+          </div>
+
+          {/* Menu Principal */}
+          <nav className="space-y-1.5 mt-2">
+            {navItems.map((item) => {
+              const active = activePage === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setActivePage(item.id)}
+                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                    active
+                      ? 'bg-[#F8DCE8]/70 text-[#A94F79] border border-[#E9A9C3]/50 shadow-xs'
+                      : 'text-[#51434B] hover:bg-[#FFF4F8] border border-transparent'
+                  }`}
+                >
+                  <span className="flex items-center gap-3">
+                    <span className={active ? 'text-[#A94F79]' : 'text-[#D77FA5]'}>{item.icon}</span>
+                    {item.label}
+                  </span>
+                  {item.badge && (
+                    <span
+                      className={`text-[11px] px-2 py-0.5 rounded-full ${
+                        active
+                          ? 'bg-[#A94F79] text-white'
+                          : 'bg-[#FFF4F8] text-[#A94F79] border border-[#F8DCE8]'
+                      }`}
+                    >
+                      {item.badge}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+
+        {/* Resumo Inferior na Sidebar */}
+        <div className="bg-[#FFF4F8] rounded-2xl p-4 border border-[#F8DCE8]">
+          <div className="flex items-center justify-between text-xs mb-2">
+            <span className="font-medium text-[#51434B]">Formação Completa</span>
+            <span className="font-bold text-[#A94F79]">{metrics.overallPercentage}%</span>
+          </div>
+          <div className="w-full h-2 bg-white rounded-full overflow-hidden border border-[#F8DCE8]">
+            <div
+              className="h-full bg-gradient-to-r from-[#E9A9C3] via-[#D77FA5] to-[#A94F79] transition-all duration-500"
+              style={{ width: `${metrics.overallPercentage}%` }}
+            />
+          </div>
+          <div className="mt-3 flex items-center justify-between text-[11px] text-[#51434B]/80">
+            <span>
+              {metrics.completedDaysCount} / {metrics.totalDays} dias
+            </span>
+            <span>{metrics.studiedCardsCount} / 78 cartas</span>
+          </div>
+        </div>
+      </aside>
+
+      {/* Conteúdo Principal */}
+      <main className="flex-1 lg:pl-72">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-9">
+          {activePage === 'dashboard' && (
+            <DashboardPage
+              state={state}
+              metrics={metrics}
+              onStartToday={() => openDailyStudy(metrics.currentStudyDay.id)}
+              onContinueLast={() => openDailyStudy(state.lastVisitedDayId || metrics.currentStudyDay.id)}
+              onToggleTask={toggleTask}
+              onOpenDay={openDailyStudy}
+              onNavigate={setActivePage}
+            />
+          )}
+
+          {activePage === 'schedule' && (
+            <FullSchedulePage
+              state={state}
+              onOpenDay={openDailyStudy}
+              onToggleTask={toggleTask}
+              onToggleDayComplete={toggleDayCompletion}
+              onToggleFavorite={toggleFavoriteDay}
+              onMoveDay={moveDayOrder}
+            />
+          )}
+
+          {activePage === 'daily' && (
+            <DailyStudyPage
+              state={state}
+              dayId={selectedDayId}
+              onSelectDay={openDailyStudy}
+              onToggleTask={toggleTask}
+              onToggleDayComplete={toggleDayCompletion}
+              onToggleFavorite={toggleFavoriteDay}
+              onMoveTask={moveTaskOrder}
+              onSaveNotes={saveDayNotes}
+              onBackToSchedule={() => setActivePage('schedule')}
+            />
+          )}
+
+          {activePage === 'library' && (
+            <CardLibraryPage
+              state={state}
+              metrics={metrics}
+              onOpenDay={openDailyStudy}
+            />
+          )}
+
+          {activePage === 'progress' && (
+            <ProgressPage
+              state={state}
+              metrics={metrics}
+              onOpenDay={openDailyStudy}
+            />
+          )}
+
+          {activePage === 'notes' && (
+            <NotesPage
+              state={state}
+              onAddNote={(note) => {
+                setState((prev) => ({
+                  ...prev,
+                  notes: [note, ...prev.notes],
+                }));
+                showToast('Anotação criada no caderno.');
+              }}
+              onUpdateNote={(updated) => {
+                setState((prev) => ({
+                  ...prev,
+                  notes: prev.notes.map((n) => (n.id === updated.id ? updated : n)),
+                }));
+                showToast('Anotação atualizada.');
+              }}
+              onDeleteNote={(id) => {
+                setState((prev) => ({
+                  ...prev,
+                  notes: prev.notes.filter((n) => n.id !== id),
+                }));
+                showToast('Anotação excluída.');
+              }}
+            />
+          )}
+
+          {activePage === 'settings' && (
+            <SettingsPage
+              state={state}
+              onUpdateSettings={(newSettings) => {
+                setState((prev) => ({ ...prev, settings: newSettings }));
+                showToast('Configurações salvas.');
+              }}
+              onImportBackup={(imported) => {
+                setState(imported);
+                showToast('Backup restaurado com sucesso.');
+              }}
+              onResetProgress={() => {
+                const fresh = createInitialState();
+                fresh.settings = state.settings;
+                setState(fresh);
+                setSelectedDayId(fresh.days[0].id);
+                showToast('Todo o progresso foi reiniciado para 0%.');
+              }}
+            />
+          )}
+        </div>
+      </main>
+    </div>
+  );
+}
+
+// ============================================================================
+// PÁGINA A: DASHBOARD — PÁGINA INICIAL
+// ============================================================================
+
+interface DashboardProps {
+  state: PlannerState;
+  metrics: any;
+  onStartToday: () => void;
+  onContinueLast: () => void;
+  onToggleTask: (dayId: string, taskId: string) => void;
+  onOpenDay: (dayId: string) => void;
+  onNavigate: (page: PageRoute) => void;
+}
+
+const DashboardPage: React.FC<DashboardProps> = ({
+  state,
+  metrics,
+  onStartToday,
+  onContinueLast,
+  onToggleTask,
+  onOpenDay,
+  onNavigate,
+}) => {
+  const { currentStudyDay, currentStudyDayIndex } = metrics;
+  const scheduledDate = calculateScheduledDateForDayIndex(
+    currentStudyDayIndex,
+    state.settings.startDate,
+    state.settings.daysPerWeek
+  );
+
+  const upcomingDays = state.days.slice(
+    currentStudyDayIndex + 1,
+    currentStudyDayIndex + 5
+  );
+
+  // Mini Calendário do Mês Atual
+  const todayObj = new Date();
+  const [calYear, setCalYear] = useState(todayObj.getFullYear());
+  const [calMonth, setCalMonth] = useState(todayObj.getMonth());
+
+  // Mapear datas previstas -> StudyDay
+  const dateToDayMap = useMemo(() => {
+    const map: Record<string, StudyDay> = {};
+    state.days.forEach((day, idx) => {
+      const iso = calculateScheduledDateForDayIndex(
+        idx,
+        state.settings.startDate,
+        state.settings.daysPerWeek
+      );
+      if (!map[iso]) map[iso] = day;
+    });
+    return map;
+  }, [state.days, state.settings.startDate, state.settings.daysPerWeek]);
+
+  const calendarCells = useMemo(() => {
+    const firstDayOfMonth = new Date(calYear, calMonth, 1).getDay();
+    const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+    const cells: { dayNum: number | null; iso?: string }[] = [];
+
+    for (let i = 0; i < firstDayOfMonth; i++) {
+      cells.push({ dayNum: null });
+    }
+    for (let d = 1; d <= daysInMonth; d++) {
+      const iso = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      cells.push({ dayNum: d, iso });
+    }
+    return cells;
+  }, [calYear, calMonth]);
+
+  const monthName = new Date(calYear, calMonth, 1).toLocaleDateString('pt-BR', {
+    month: 'long',
+    year: 'numeric',
+  });
+
+  const todayTasksDone = currentStudyDay.tasks.filter((t: StudyTask) => t.completed).length;
+  const todayTasksTotal = currentStudyDay.tasks.length;
+  const todayPct = todayTasksTotal > 0 ? Math.round((todayTasksDone / todayTasksTotal) * 100) : 0;
+
+  return (
+    <div className="space-y-6">
+      {/* Lembrete Visual Configurável */}
+      {state.settings.visualReminders && (
+        <div className="bg-white border border-[#E9A9C3] rounded-2xl px-4 py-3 flex flex-wrap items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full bg-[#FFF4F8] flex items-center justify-center text-[#A94F79]">
+              <Bell className="w-4 h-4" />
+            </div>
+            <p className="text-xs sm:text-sm text-[#51434B]">
+              <span className="font-semibold text-[#A94F79]">Meta semanal ativa:</span>{' '}
+              {state.settings.daysPerWeek} {state.settings.daysPerWeek === 1 ? 'dia' : 'dias'} de estudo por semana • Próximo foco:{' '}
+              <strong>Dia {String(currentStudyDay.dayNumber).padStart(2, '0')}</strong>.
+            </p>
+          </div>
+          <button
+            onClick={() => onNavigate('settings')}
+            className="text-xs font-medium text-[#A94F79] hover:underline"
+          >
+            Ajustar ritmo
+          </button>
+        </div>
+      )}
+
+      {/* Cabeçalho de Boas-vindas */}
+      <div className="bg-white rounded-3xl p-6 sm:p-8 border border-[#F8DCE8] shadow-xs relative overflow-hidden">
+        <div className="absolute -right-8 -top-8 w-40 h-40 rounded-full bg-[#FFF4F8] opacity-80 pointer-events-none" />
+        <div className="relative flex flex-col md:flex-row md:items-center md:justify-between gap-5">
+          <div>
+            <div className="flex flex-wrap items-center gap-2 mb-2">
+              <CelestialBadge variant="soft">
+                <Sparkles className="w-3 h-3" />
+                {currentStudyDay.stageTitle}
+              </CelestialBadge>
+              <span className="text-xs text-[#51434B]/70 capitalize">{formatFullDateHeader()}</span>
+            </div>
+            <h2 className="font-serif-editorial text-3xl sm:text-4xl font-bold text-[#51434B]">
+              Olá, <span className="text-[#A94F79]">{state.settings.userName}</span>
+            </h2>
+            <p className="text-sm text-[#51434B]/80 mt-1">
+              Você está no <strong className="text-[#A94F79]">Dia {String(currentStudyDay.dayNumber).padStart(2, '0')}</strong> de {metrics.totalDays} • {currentStudyDay.moduleTitle}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={onContinueLast}
+              className="px-4 py-2.5 rounded-xl bg-[#FFF4F8] text-[#A94F79] border border-[#E9A9C3] text-sm font-medium hover:bg-[#F8DCE8]/50 transition-colors flex items-center gap-2"
+            >
+              <RotateCcw className="w-4 h-4" />
+              Continuar de onde parou
+            </button>
+            <button
+              onClick={onStartToday}
+              className="px-5 py-2.5 rounded-xl bg-[#D77FA5] hover:bg-[#A94F79] text-white text-sm font-semibold shadow-sm shadow-[#D77FA5]/30 transition-all flex items-center gap-2"
+            >
+              <Play className="w-4 h-4 fill-current" />
+              Começar estudos de hoje
+            </button>
+          </div>
+        </div>
+
+        {/* Barra de Progresso Geral */}
+        <div className="mt-7 pt-6 border-t border-[#F8DCE8]">
+          <div className="flex flex-wrap items-end justify-between gap-2 mb-2">
+            <div>
+              <span className="text-xs uppercase tracking-wider text-[#A94F79] font-semibold">
+                Progresso Geral da Formação
+              </span>
+              <p className="text-xs text-[#51434B]/70">
+                {metrics.completedTasks} de {metrics.totalTasks} tópicos individuais concluídos
+              </p>
+            </div>
+            <span className="font-serif-editorial text-3xl font-bold text-[#A94F79]">
+              {metrics.overallPercentage}%
+            </span>
+          </div>
+          <div className="w-full h-3 bg-[#FFF4F8] rounded-full overflow-hidden border border-[#F8DCE8]">
+            <div
+              className="h-full bg-gradient-to-r from-[#E9A9C3] via-[#D77FA5] to-[#A94F79] rounded-full transition-all duration-500"
+              style={{ width: `${metrics.overallPercentage}%` }}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Cards de Indicadores */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white rounded-2xl p-4 sm:p-5 border border-[#F8DCE8] shadow-xs">
+          <div className="flex items-center justify-between text-[#D77FA5] mb-2">
+            <span className="text-xs font-medium text-[#51434B]/75">Dias Concluídos</span>
+            <CheckCircle2 className="w-4 h-4" />
+          </div>
+          <div className="font-serif-editorial text-2xl sm:text-3xl font-bold text-[#51434B]">
+            {metrics.completedDaysCount}{' '}
+            <span className="text-sm font-sans font-normal text-[#51434B]/60">/ {metrics.totalDays}</span>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl p-4 sm:p-5 border border-[#F8DCE8] shadow-xs">
+          <div className="flex items-center justify-between text-[#D77FA5] mb-2">
+            <span className="text-xs font-medium text-[#51434B]/75">Tarefas Concluídas</span>
+            <Sparkles className="w-4 h-4" />
+          </div>
+          <div className="font-serif-editorial text-2xl sm:text-3xl font-bold text-[#51434B]">
+            {metrics.completedTasks}{' '}
+            <span className="text-sm font-sans font-normal text-[#51434B]/60">/ {metrics.totalTasks}</span>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl p-4 sm:p-5 border border-[#F8DCE8] shadow-xs">
+          <div className="flex items-center justify-between text-[#D77FA5] mb-2">
+            <span className="text-xs font-medium text-[#51434B]/75">Sequência (Streak)</span>
+            <Flame className="w-4 h-4" />
+          </div>
+          <div className="font-serif-editorial text-2xl sm:text-3xl font-bold text-[#A94F79]">
+            {metrics.currentStreak}{' '}
+            <span className="text-sm font-sans font-normal text-[#51434B]/60">
+              {metrics.currentStreak === 1 ? 'dia seguido' : 'dias seguidos'}
+            </span>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl p-4 sm:p-5 border border-[#F8DCE8] shadow-xs">
+          <div className="flex items-center justify-between text-[#D77FA5] mb-2">
+            <span className="text-xs font-medium text-[#51434B]/75">Cartas Estudadas</span>
+            <Layers className="w-4 h-4" />
+          </div>
+          <div className="font-serif-editorial text-2xl sm:text-3xl font-bold text-[#51434B]">
+            {metrics.studiedCardsCount}{' '}
+            <span className="text-sm font-sans font-normal text-[#51434B]/60">/ 78</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Grid Principal: Card "Estudo de Hoje" + Calendário & Próximos Conteúdos */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Card de Destaque: Estudo de Hoje */}
+        <div className="lg:col-span-7 bg-white rounded-3xl p-6 border-2 border-[#E9A9C3] shadow-xs flex flex-col justify-between">
+          <div>
+            <div className="flex flex-wrap items-center justify-between gap-2 pb-4 border-b border-[#F8DCE8]">
+              <div className="flex items-center gap-2">
+                <span className="px-3 py-1 rounded-full bg-[#A94F79] text-white text-xs font-semibold tracking-wide flex items-center gap-1.5">
+                  <Moon className="w-3 h-3" />
+                  Estudo de hoje
+                </span>
+                <span className="text-xs font-semibold text-[#A94F79]">
+                  Dia {String(currentStudyDay.dayNumber).padStart(2, '0')}
+                </span>
+              </div>
+              <span className="text-xs text-[#51434B]/70">
+                Data prevista: <strong>{formatDatePTBR(scheduledDate)}</strong>
+              </span>
+            </div>
+
+            <div className="mt-4">
+              <p className="text-xs font-medium text-[#D77FA5] uppercase tracking-wider">
+                {currentStudyDay.moduleTitle}
+              </p>
+              <h3 className="font-serif-editorial text-2xl font-bold text-[#51434B] mt-1">
+                {currentStudyDay.theme}
+              </h3>
+              <p className="text-xs text-[#51434B]/75 mt-1">{currentStudyDay.objective}</p>
+            </div>
+
+            {/* Progresso do Dia */}
+            <div className="mt-4 bg-[#FFF4F8] rounded-xl p-3 border border-[#F8DCE8]">
+              <div className="flex items-center justify-between text-xs mb-1.5">
+                <span className="font-medium text-[#51434B]">Tópicos programados para hoje</span>
+                <span className="font-semibold text-[#A94F79]">
+                  {todayTasksDone}/{todayTasksTotal} ({todayPct}%)
+                </span>
+              </div>
+              <div className="w-full h-1.5 bg-white rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-[#D77FA5] transition-all duration-300"
+                  style={{ width: `${todayPct}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Checklist Rápido */}
+            <ul className="mt-4 space-y-2">
+              {currentStudyDay.tasks.map((task: StudyTask) => (
+                <li key={task.id}>
+                  <button
+                    onClick={() => onToggleTask(currentStudyDay.id, task.id)}
+                    className={`w-full text-left px-3.5 py-2.5 rounded-xl border text-sm transition-all flex items-center gap-3 ${
+                      task.completed
+                        ? 'bg-[#FFF4F8]/70 border-[#F8DCE8] text-[#51434B]/55 line-through'
+                        : 'bg-white border-[#F8DCE8] hover:border-[#D77FA5] text-[#51434B]'
+                    }`}
+                  >
+                    {task.completed ? (
+                      <CheckCircle2 className="w-4 h-4 text-[#A94F79] shrink-0" />
+                    ) : (
+                      <Circle className="w-4 h-4 text-[#D77FA5] shrink-0" />
+                    )}
+                    <span>{task.title}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="mt-6 pt-4 border-t border-[#F8DCE8] flex flex-wrap items-center justify-between gap-3">
+            <button
+              onClick={() => onNavigate('schedule')}
+              className="text-xs font-medium text-[#51434B]/80 hover:text-[#A94F79] transition-colors"
+            >
+              Ver cronograma completo →
+            </button>
+            <button
+              onClick={onStartToday}
+              className="px-4 py-2 rounded-xl bg-[#D77FA5] hover:bg-[#A94F79] text-white text-xs font-semibold transition-colors flex items-center gap-1.5"
+            >
+              Abrir página de estudo diário
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Coluna Direita: Calendário de Estudos + Próximos Conteúdos */}
+        <div className="lg:col-span-5 space-y-6">
+          {/* Mini Calendário */}
+          <div className="bg-white rounded-3xl p-5 border border-[#F8DCE8] shadow-xs">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-serif-editorial text-xl font-bold text-[#51434B] capitalize flex items-center gap-2">
+                <CalendarIcon className="w-4 h-4 text-[#D77FA5]" />
+                {monthName}
+              </h3>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => {
+                    if (calMonth === 0) {
+                      setCalMonth(11);
+                      setCalYear((y) => y - 1);
+                    } else {
+                      setCalMonth((m) => m - 1);
+                    }
+                  }}
+                  className="p-1.5 rounded-lg hover:bg-[#FFF4F8] text-[#A94F79]"
+                  aria-label="Mês anterior"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => {
+                    if (calMonth === 11) {
+                      setCalMonth(0);
+                      setCalYear((y) => y + 1);
+                    } else {
+                      setCalMonth((m) => m + 1);
+                    }
+                  }}
+                  className="p-1.5 rounded-lg hover:bg-[#FFF4F8] text-[#A94F79]"
+                  aria-label="Próximo mês"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-semibold text-[#A94F79]/75 mb-1.5">
+              <span>D</span>
+              <span>S</span>
+              <span>T</span>
+              <span>Q</span>
+              <span>Q</span>
+              <span>S</span>
+              <span>S</span>
+            </div>
+
+            <div className="grid grid-cols-7 gap-1">
+              {calendarCells.map((cell, idx) => {
+                if (!cell.dayNum || !cell.iso) {
+                  return <div key={`empty-${idx}`} className="h-9" />;
+                }
+                const scheduledStudy = dateToDayMap[cell.iso];
+                const isToday = cell.iso === getTodayISO();
+                const isCompleted =
+                  scheduledStudy && scheduledStudy.tasks.every((t) => t.completed);
+                const hasActivity = (state.activityLog[cell.iso]?.tasksCompleted || 0) > 0;
+
+                return (
+                  <button
+                    key={cell.iso}
+                    onClick={() => {
+                      if (scheduledStudy) onOpenDay(scheduledStudy.id);
+                    }}
+                    disabled={!scheduledStudy}
+                    title={
+                      scheduledStudy
+                        ? `Dia ${String(scheduledStudy.dayNumber).padStart(2, '0')}: ${scheduledStudy.theme}`
+                        : 'Dia livre'
+                    }
+                    className={`h-9 rounded-xl text-xs flex flex-col items-center justify-center relative transition-all ${
+                      isCompleted
+                        ? 'bg-[#A94F79] text-white font-semibold'
+                        : scheduledStudy
+                        ? 'bg-[#FFF4F8] text-[#51434B] border border-[#E9A9C3]/60 hover:border-[#A94F79] font-medium'
+                        : 'text-[#51434B]/45'
+                    } ${isToday ? 'ring-2 ring-[#D77FA5] ring-offset-1' : ''}`}
+                  >
+                    <span>{cell.dayNum}</span>
+                    {hasActivity && !isCompleted && (
+                      <span className="w-1 h-1 rounded-full bg-[#A94F79] absolute bottom-1" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="mt-3 pt-3 border-t border-[#F8DCE8] flex items-center justify-between text-[11px] text-[#51434B]/70">
+              <span className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-xs bg-[#FFF4F8] border border-[#E9A9C3]" />
+                Dia programado
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-xs bg-[#A94F79]" />
+                Dia concluído
+              </span>
+            </div>
+          </div>
+
+          {/* Próximos Conteúdos */}
+          <div className="bg-white rounded-3xl p-5 border border-[#F8DCE8] shadow-xs">
+            <h3 className="font-serif-editorial text-xl font-bold text-[#51434B] mb-3">
+              Próximos Conteúdos
+            </h3>
+            <div className="space-y-2.5">
+              {upcomingDays.map((day: StudyDay) => (
+                <button
+                  key={day.id}
+                  onClick={() => onOpenDay(day.id)}
+                  className="w-full text-left p-3 rounded-2xl bg-[#FFF4F8]/60 hover:bg-[#F8DCE8]/50 border border-[#F8DCE8] transition-all flex items-center justify-between gap-3"
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-bold text-[#A94F79]">
+                        Dia {String(day.dayNumber).padStart(2, '0')}
+                      </span>
+                      <span className="text-[11px] text-[#51434B]/65 truncate">
+                        • {day.moduleTitle}
+                      </span>
+                    </div>
+                    <p className="text-xs font-medium text-[#51434B] truncate mt-0.5">
+                      {day.theme}
+                    </p>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-[#D77FA5] shrink-0" />
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ============================================================================
+// PÁGINA B: CRONOGRAMA COMPLETO
+// ============================================================================
+
+interface SchedulePageProps {
+  state: PlannerState;
+  onOpenDay: (dayId: string) => void;
+  onToggleTask: (dayId: string, taskId: string) => void;
+  onToggleDayComplete: (dayId: string) => void;
+  onToggleFavorite: (dayId: string) => void;
+  onMoveDay: (dayId: string, direction: 'up' | 'down') => void;
+}
+
+type ScheduleFilterType = 'all' | 'not_started' | 'in_progress' | 'completed' | 'favorites';
+
+const FullSchedulePage: React.FC<SchedulePageProps> = ({
+  state,
+  onOpenDay,
+  onToggleTask,
+  onToggleDayComplete,
+  onToggleFavorite,
+  onMoveDay,
+}) => {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<ScheduleFilterType>('all');
+  const [expandedModules, setExpandedModules] = useState<Record<number, boolean>>({ 1: true });
+  const [moduleVisibleLimit, setModuleVisibleLimit] = useState<Record<number, number>>({});
+
+  const toggleModuleExpand = (moduleId: number) => {
+    setExpandedModules((prev) => ({ ...prev, [moduleId]: !prev[moduleId] }));
+  };
+
+  const expandAll = () => {
+    const all: Record<number, boolean> = {};
+    MODULES_CATALOG.forEach((m) => (all[m.id] = true));
+    setExpandedModules(all);
+  };
+
+  const collapseAll = () => {
+    setExpandedModules({});
+  };
+
+  // Mapeamento de índice global -> data prevista
+  const dayDateMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    state.days.forEach((d, idx) => {
+      map[d.id] = calculateScheduledDateForDayIndex(
+        idx,
+        state.settings.startDate,
+        state.settings.daysPerWeek
+      );
+    });
+    return map;
+  }, [state.days, state.settings.startDate, state.settings.daysPerWeek]);
+
+  // Filtragem de dias
+  const filteredDaysByModule = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    const grouped: Record<number, StudyDay[]> = {};
+    MODULES_CATALOG.forEach((m) => (grouped[m.id] = []));
+
+    state.days.forEach((day) => {
+      const done = day.tasks.filter((t) => t.completed).length;
+      const total = day.tasks.length;
+      const isFav = state.favorites.includes(day.id);
+
+      if (statusFilter === 'not_started' && done > 0) return;
+      if (statusFilter === 'in_progress' && (done === 0 || done === total)) return;
+      if (statusFilter === 'completed' && done < total) return;
+      if (statusFilter === 'favorites' && !isFav) return;
+
+      if (q) {
+        const matchDayNum = `dia ${String(day.dayNumber).padStart(2, '0')}`.includes(q) || `dia ${day.dayNumber}`.includes(q);
+        const matchTheme = day.theme.toLowerCase().includes(q);
+        const matchMod = day.moduleTitle.toLowerCase().includes(q);
+        const matchTask = day.tasks.some((t) => t.title.toLowerCase().includes(q));
+        if (!matchDayNum && !matchTheme && !matchMod && !matchTask) return;
+      }
+
+      if (grouped[day.moduleId]) {
+        grouped[day.moduleId].push(day);
+      }
+    });
+
+    return grouped;
+  }, [state.days, state.favorites, statusFilter, searchQuery]);
+
+  // Se houver busca ativa, expandir automaticamente módulos com resultados
+  useEffect(() => {
+    if (searchQuery.trim().length > 1 || statusFilter !== 'all') {
+      const nextExpanded: Record<number, boolean> = {};
+      MODULES_CATALOG.forEach((m) => {
+        if ((filteredDaysByModule[m.id]?.length || 0) > 0) {
+          nextExpanded[m.id] = true;
+        }
+      });
+      setExpandedModules(nextExpanded);
+    }
+  }, [searchQuery, statusFilter, filteredDaysByModule]);
+
+  const filterButtons: { id: ScheduleFilterType; label: string }[] = [
+    { id: 'all', label: 'Todos os estudos' },
+    { id: 'not_started', label: 'Não iniciados' },
+    { id: 'in_progress', label: 'Em andamento' },
+    { id: 'completed', label: 'Concluídos' },
+    { id: 'favorites', label: 'Favoritos' },
+  ];
+
+  return (
+    <div className="space-y-6">
+      {/* Cabeçalho */}
+      <div className="bg-white rounded-3xl p-6 border border-[#F8DCE8] shadow-xs">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <CelestialBadge>17 Módulos • {state.days.length} Dias Numerados</CelestialBadge>
+            <h2 className="font-serif-editorial text-3xl font-bold text-[#51434B] mt-2">
+              Cronograma Completo da Formação
+            </h2>
+            <p className="text-sm text-[#51434B]/75 mt-1">
+              Organização progressiva por módulos, temas diários e checklists individuais de tópicos.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={expandAll}
+              className="px-3 py-2 rounded-xl bg-[#FFF4F8] text-[#A94F79] border border-[#F8DCE8] text-xs font-medium hover:bg-[#F8DCE8]/50"
+            >
+              Expandir todos
+            </button>
+            <button
+              onClick={collapseAll}
+              className="px-3 py-2 rounded-xl bg-[#FFF4F8] text-[#A94F79] border border-[#F8DCE8] text-xs font-medium hover:bg-[#F8DCE8]/50"
+            >
+              Recolher todos
+            </button>
+          </div>
+        </div>
+
+        {/* Busca e Filtros */}
+        <div className="mt-5 pt-5 border-t border-[#F8DCE8] space-y-3">
+          <div className="relative">
+            <Search className="w-4 h-4 text-[#D77FA5] absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Pesquisar por número do dia (ex: Dia 01), carta, módulo ou tópico..."
+              className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#FFF4F8] border border-[#F8DCE8] focus:border-[#D77FA5] focus:bg-white focus:outline-none text-sm text-[#51434B]"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[#A94F79]"
+              >
+                Limpar
+              </button>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-[#51434B]/65 flex items-center gap-1 mr-1">
+              <Filter className="w-3.5 h-3.5 text-[#D77FA5]" />
+              Filtros:
+            </span>
+            {filterButtons.map((fb) => (
+              <button
+                key={fb.id}
+                onClick={() => setStatusFilter(fb.id)}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                  statusFilter === fb.id
+                    ? 'bg-[#A94F79] text-white shadow-xs'
+                    : 'bg-[#FFF4F8] text-[#51434B] border border-[#F8DCE8] hover:border-[#D77FA5]'
+                }`}
+              >
+                {fb.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Lista de Módulos Expansíveis */}
+      <div className="space-y-4">
+        {MODULES_CATALOG.map((mod) => {
+          const modDays = filteredDaysByModule[mod.id] || [];
+          const allModDays = state.days.filter((d) => d.moduleId === mod.id);
+          const totalModTasks = allModDays.reduce((acc, d) => acc + d.tasks.length, 0);
+          const doneModTasks = allModDays.reduce(
+            (acc, d) => acc + d.tasks.filter((t) => t.completed).length,
+            0
+          );
+          const modPct = totalModTasks > 0 ? Math.round((doneModTasks / totalModTasks) * 100) : 0;
+          const isExpanded = !!expandedModules[mod.id];
+          const currentLimit = moduleVisibleLimit[mod.id] || 15;
+          const visibleDays = modDays.slice(0, currentLimit);
+
+          if ((searchQuery || statusFilter !== 'all') && modDays.length === 0) {
+            return null;
+          }
+
+          return (
+            <div
+              key={mod.id}
+              className="bg-white rounded-3xl border border-[#F8DCE8] shadow-xs overflow-hidden"
+            >
+              {/* Cabeçalho do Módulo */}
+              <button
+                onClick={() => toggleModuleExpand(mod.id)}
+                className="w-full p-5 sm:p-6 text-left flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-[#FFF4F8]/40 transition-colors"
+              >
+                <div className="flex items-start gap-3.5">
+                  <div className="w-9 h-9 rounded-xl bg-[#FFF4F8] border border-[#E9A9C3] flex items-center justify-center text-[#A94F79] shrink-0 mt-0.5">
+                    {isExpanded ? <ChevronDown className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
+                  </div>
+                  <div>
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-[#D77FA5]">
+                      {mod.stage} • {allModDays.length} dias
+                    </span>
+                    <h3 className="font-serif-editorial text-2xl font-bold text-[#51434B]">
+                      {mod.title}
+                    </h3>
+                    <p className="text-xs text-[#51434B]/75 mt-0.5">{mod.subtitle}</p>
+                  </div>
                 </div>
-            </header>
 
-            <!-- Pages Wrapper -->
-            <div class="pages-container">
+                <div className="sm:w-48 shrink-0">
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span className="text-[#51434B]/70">
+                      {doneModTasks}/{totalModTasks} tópicos
+                    </span>
+                    <span className="font-bold text-[#A94F79]">{modPct}%</span>
+                  </div>
+                  <div className="w-full h-2 bg-[#FFF4F8] rounded-full overflow-hidden border border-[#F8DCE8]">
+                    <div
+                      className="h-full bg-[#D77FA5] transition-all duration-300"
+                      style={{ width: `${modPct}%` }}
+                    />
+                  </div>
+                </div>
+              </button>
 
-                <!-- PAGE 1: DASHBOARD -->
-                <section id="page-dashboard" class="page active">
-                    <div class="welcome-banner">
-                        <div class="welcome-text">
-                            <h2 id="dash-greeting">Olá, Taróloga!</h2>
-                            <p>Sua jornada mística e acadêmica pelo Tarot está organizada. Mantenha a constância.</p>
-                        </div>
-                        <div class="welcome-stats-mini">
-                            <div class="mini-stat">
-                                <span class="ms-val" id="dash-day-num">Dia 01</span>
-                                <span class="ms-lbl">Dia Atual</span>
-                            </div>
-                            <div class="mini-stat">
-                                <span class="ms-val" id="dash-total-pct">0%</span>
-                                <span class="ms-lbl">Concluído</span>
-                            </div>
-                        </div>
-                    </div>
+              {/* Dias do Módulo */}
+              {isExpanded && (
+                <div className="p-4 sm:p-6 pt-0 border-t border-[#F8DCE8] bg-[#FFF4F8]/30 space-y-4">
+                  <div className="pt-4 space-y-3">
+                    {visibleDays.map((day) => {
+                      const doneCount = day.tasks.filter((t) => t.completed).length;
+                      const totalCount = day.tasks.length;
+                      const dayPct = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 0;
+                      const isDayDone = totalCount > 0 && doneCount === totalCount;
+                      const isFav = state.favorites.includes(day.id);
 
-                    <!-- Today's Study Highlight Card -->
-                    <div class="today-highlight-card">
-                        <div class="thc-header">
-                            <span class="badge-module" id="dash-today-module">Módulo 1 — Fundamentos do Tarot</span>
-                            <span class="badge-day" id="dash-today-daylabel">Dia 1 de 395</span>
-                        </div>
-                        <h3 id="dash-today-title">História e Origem do Tarot</h3>
-                        <p class="thc-subtitle">Objetivo organizacional do dia (Conteúdo puramente externo para pesquisa)</p>
-                        <div class="thc-checklist" id="dash-today-checklist"></div>
-                        <div class="thc-footer">
-                            <button class="btn-primary" id="btn-goto-study">
-                                <i class="fa-solid fa-book-bookmark"></i> Abrir Estudo Diário
-                            </button>
-                            <span class="thc-status" id="dash-today-status">Status: Não concluído</span>
-                        </div>
-                    </div>
-
-                    <!-- Grid of stats & calendar -->
-                    <div class="dashboard-grid">
-                        <div class="dash-col-left">
-                            <div class="card general-progress-card">
-                                <h3>Progresso Geral da Formação</h3>
-                                <div class="progress-bar-wrap">
-                                    <div class="progress-bar-fill" id="overall-progress-fill" style="width: 0%;"></div>
-                                </div>
-                                <div class="progress-labels">
-                                    <span id="overall-progress-text">0 de 395 dias concluídos (0%)</span>
-                                    <span id="dash-tasks-count">0 tarefas feitas</span>
-                                </div>
-                                <div class="stats-subgrid">
-                                    <div class="ss-item">
-                                        <i class="fa-solid fa-fire"></i>
-                                        <div>
-                                            <strong id="stat-streak">0 dias</strong>
-                                            <span>Streak Atual</span>
-                                        </div>
-                                    </div>
-                                    <div class="ss-item">
-                                        <i class="fa-solid fa-clone"></i>
-                                        <div>
-                                            <strong id="stat-cards">0 / 78</strong>
-                                            <span>Cartas Estudadas</span>
-                                        </div>
-                                    </div>
-                                    <div class="ss-item">
-                                        <i class="fa-solid fa-layer-group"></i>
-                                        <div>
-                                            <strong id="stat-modules">0 / 17</strong>
-                                            <span>Módulos Concluídos</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="card next-studies-card">
-                                <h3>Próximos Estudos na Fila</h3>
-                                <div class="next-list" id="dash-next-list"></div>
-                            </div>
-                        </div>
-
-                        <div class="dash-col-right">
-                            <div class="card mini-calendar-card">
-                                <div class="cal-header">
-                                    <h3 id="cal-month-year">Novembro 2026</h3>
-                                    <div class="cal-nav">
-                                        <button id="cal-prev"><i class="fa-solid fa-chevron-left"></i></button>
-                                        <button id="cal-next"><i class="fa-solid fa-chevron-right"></i></button>
-                                    </div>
-                                </div>
-                                <div class="cal-weekdays">
-                                    <span>Dom</span><span>Seg</span><span>Ter</span><span>Qua</span><span>Qui</span><span>Sex</span><span>Sáb</span>
-                                </div>
-                                <div class="cal-grid" id="calendar-days-grid"></div>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- PAGE 2: CRONOGRAMA COMPLETO -->
-                <section id="page-cronograma" class="page">
-                    <div class="page-header-flex">
-                        <div>
-                            <h2>Cronograma Completo</h2>
-                            <p>17 Módulos de Formação Progressiva — Estrutura Acadêmica Completa</p>
-                        </div>
-                        <div class="cronograma-controls">
-                            <div class="search-box">
-                                <i class="fa-solid fa-magnifying-glass"></i>
-                                <input type="text" id="cron-search" placeholder="Pesquisar dias, temas ou assuntos...">
-                            </div>
-                            <div class="filter-buttons" id="cron-filters">
-                                <button class="filter-btn active" data-filter="all">Todos</button>
-                                <button class="filter-btn" data-filter="pending">Não Iniciados</button>
-                                <button class="filter-btn" data-filter="in-progress">Em Andamento</button>
-                                <button class="filter-btn" data-filter="completed">Concluídos</button>
-                                <button class="filter-btn" data-filter="favorites"><i class="fa-solid fa-star"></i></button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="modules-accordion" id="modules-accordion-container"></div>
-                </section>
-
-                <!-- PAGE 3: ESTUDO DIÁRIO -->
-                <section id="page-estudo" class="page">
-                    <div class="study-top-nav">
-                        <button class="btn-secondary" id="study-back-cron"><i class="fa-solid fa-arrow-left"></i> Voltar ao Cronograma</button>
-                        <div class="study-pagination-btns">
-                            <button class="btn-secondary" id="study-prev-day"><i class="fa-solid fa-chevron-left"></i> Dia Anterior</button>
-                            <button class="btn-secondary" id="study-next-day">Próximo Dia <i class="fa-solid fa-chevron-right"></i></button>
-                        </div>
-                    </div>
-
-                    <div class="study-card-main">
-                        <div class="scm-header">
+                      return (
+                        <div
+                          key={day.id}
+                          className={`bg-white rounded-2xl p-4 sm:p-5 border transition-all ${
+                            isDayDone
+                              ? 'border-[#D77FA5]/60 bg-[#FFF4F8]/30'
+                              : 'border-[#F8DCE8]'
+                          }`}
+                        >
+                          {/* Topo do Card do Dia */}
+                          <div className="flex flex-wrap items-start justify-between gap-3 pb-3 border-b border-[#F8DCE8]">
                             <div>
-                                <span class="badge-module" id="study-mod-badge">Módulo 1</span>
-                                <span class="badge-day" id="study-day-badge">Dia 1</span>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="px-2.5 py-0.5 rounded-lg bg-[#A94F79] text-white text-xs font-bold">
+                                  Dia {String(day.dayNumber).padStart(2, '0')}
+                                </span>
+                                <span className="text-xs text-[#51434B]/65">
+                                  Previsto: {formatDatePTBR(dayDateMap[day.id])}
+                                </span>
+                                {day.isReview && (
+                                  <CelestialBadge variant="soft">Revisão</CelestialBadge>
+                                )}
+                              </div>
+                              <h4 className="font-serif-editorial text-xl font-bold text-[#51434B] mt-1.5">
+                                {day.theme}
+                              </h4>
+                              <p className="text-[11px] text-[#A94F79]">{day.moduleTitle}</p>
                             </div>
-                            <button class="favorite-toggle-btn" id="study-fav-btn" title="Favoritar este dia">
-                                <i class="fa-regular fa-star"></i>
-                            </button>
-                        </div>
 
-                        <h2 id="study-title">Título do Estudo</h2>
-                        <div class="study-objective-box">
-                            <strong><i class="fa-solid fa-bullseye"></i> Objetivo Organizacional:</strong>
-                            <p id="study-objective-text">Organizar os estudos sobre o tema sem conteúdo prescritivo.</p>
-                        </div>
-
-                        <div class="study-section-box">
-                            <h3><i class="fa-solid fa-list-check"></i> Checklist de Assuntos</h3>
-                            <p class="hint-txt">Marque os tópicos conforme avança em suas pesquisas externas e leituras:</p>
-                            <div class="study-checklist-items" id="study-checklist-container"></div>
-                        </div>
-
-                        <div class="study-notes-grid">
-                            <div class="notes-box-item">
-                                <h3><i class="fa-solid fa-pen-nib"></i> Anotações Pessoais</h3>
-                                <textarea id="study-personal-notes" placeholder="Escreva suas anotações, reflexões e descobertas aqui..."></textarea>
+                            {/* Ações do Dia */}
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <button
+                                onClick={() => onMoveDay(day.id, 'up')}
+                                title="Mover dia para cima"
+                                className="p-2 rounded-lg text-[#51434B]/60 hover:text-[#A94F79] hover:bg-[#FFF4F8]"
+                              >
+                                <ArrowUp className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => onMoveDay(day.id, 'down')}
+                                title="Mover dia para baixo"
+                                className="p-2 rounded-lg text-[#51434B]/60 hover:text-[#A94F79] hover:bg-[#FFF4F8]"
+                              >
+                                <ArrowDown className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => onToggleFavorite(day.id)}
+                                title={isFav ? 'Remover dos favoritos' : 'Favoritar dia'}
+                                className={`p-2 rounded-lg border transition-colors ${
+                                  isFav
+                                    ? 'bg-[#FFF4F8] border-[#D77FA5] text-[#A94F79]'
+                                    : 'border-[#F8DCE8] text-[#51434B]/50 hover:text-[#A94F79]'
+                                }`}
+                              >
+                                <Star className={`w-3.5 h-3.5 ${isFav ? 'fill-current' : ''}`} />
+                              </button>
+                              <button
+                                onClick={() => onToggleDayComplete(day.id)}
+                                className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition-colors ${
+                                  isDayDone
+                                    ? 'bg-[#A94F79] text-white border-[#A94F79]'
+                                    : 'bg-white text-[#A94F79] border-[#E9A9C3] hover:bg-[#FFF4F8]'
+                                }`}
+                              >
+                                {isDayDone ? 'Dia concluído ✓' : 'Concluir dia'}
+                              </button>
+                              <button
+                                onClick={() => onOpenDay(day.id)}
+                                className="px-3 py-1.5 rounded-xl bg-[#D77FA5] hover:bg-[#A94F79] text-white text-xs font-semibold transition-colors"
+                              >
+                                Abrir estudo
+                              </button>
                             </div>
-                            <div class="notes-box-item">
-                                <h3><i class="fa-solid fa-note-sticky"></i> Observações da Prática</h3>
-                                <textarea id="study-observations" placeholder="Registre observações adicionais ou pendências..."></textarea>
+                          </div>
+
+                          {/* Barra de progresso individual do dia */}
+                          <div className="my-3 flex items-center gap-3">
+                            <div className="flex-1 h-1.5 bg-[#FFF4F8] rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-[#D77FA5] transition-all duration-300"
+                                style={{ width: `${dayPct}%` }}
+                              />
                             </div>
-                        </div>
+                            <span className="text-[11px] font-semibold text-[#A94F79]">
+                              {doneCount}/{totalCount} ({dayPct}%)
+                            </span>
+                          </div>
 
-                        <div class="study-actions-footer">
-                            <button class="btn-success" id="study-btn-complete">
-                                <i class="fa-solid fa-check"></i> <span id="study-complete-label">Marcar Dia como Concluído</span>
-                            </button>
-                            <button class="btn-primary" id="study-btn-save">
-                                <i class="fa-solid fa-floppy-disk"></i> Salvar Progresso e Anotações
-                            </button>
+                          {/* Checklist Individual de Assuntos */}
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5">
+                            {day.tasks.map((task) => (
+                              <button
+                                key={task.id}
+                                onClick={() => onToggleTask(day.id, task.id)}
+                                className={`text-left px-3 py-2 rounded-xl border text-xs flex items-center gap-2.5 transition-all ${
+                                  task.completed
+                                    ? 'bg-[#FFF4F8]/80 border-[#F8DCE8] text-[#51434B]/55 line-through'
+                                    : 'bg-white border-[#F8DCE8] hover:border-[#D77FA5] text-[#51434B]'
+                                }`}
+                              >
+                                {task.completed ? (
+                                  <CheckCircle2 className="w-3.5 h-3.5 text-[#A94F79] shrink-0" />
+                                ) : (
+                                  <Circle className="w-3.5 h-3.5 text-[#D77FA5] shrink-0" />
+                                )}
+                                <span>{task.title}</span>
+                              </button>
+                            ))}
+                          </div>
                         </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Paginação interna por módulo para fluidez máxima */}
+                  {modDays.length > currentLimit && (
+                    <div className="pt-2 text-center">
+                      <button
+                        onClick={() =>
+                          setModuleVisibleLimit((prev) => ({
+                            ...prev,
+                            [mod.id]: currentLimit + 25,
+                          }))
+                        }
+                        className="px-5 py-2.5 rounded-xl bg-white border border-[#E9A9C3] text-xs font-semibold text-[#A94F79] hover:bg-[#FFF4F8] transition-colors"
+                      >
+                        Carregar mais dias deste módulo ({modDays.length - currentLimit} restantes)
+                      </button>
                     </div>
-                </section>
-
-                <!-- PAGE 4: BIBLIOTECA DE CARTAS -->
-                <section id="page-biblioteca" class="page">
-                    <div class="page-header-flex">
-                        <div>
-                            <h2>Biblioteca de Cartas (78 Arcanos)</h2>
-                            <p>Organização estrutural dos 22 Arcanos Maiores e 56 Arcanos Menores</p>
-                        </div>
-                        <div class="deck-tabs" id="deck-tabs-nav">
-                            <button class="tab-chip active" data-deck="maiores">Arcanos Maiores (22)</button>
-                            <button class="tab-chip" data-deck="paus">Paus (14)</button>
-                            <button class="tab-chip" data-deck="copas">Copas (14)</button>
-                            <button class="tab-chip" data-deck="espadas">Espadas (14)</button>
-                            <button class="tab-chip" data-deck="ouros">Ouros (14)</button>
-                        </div>
-                    </div>
-
-                    <div class="card-grid-library" id="cards-library-grid"></div>
-                </section>
-
-                <!-- PAGE 5: MEU PROGRESSO -->
-                <section id="page-progresso" class="page">
-                    <div class="page-header-flex">
-                        <div>
-                            <h2>Meu Progresso na Formação</h2>
-                            <p>Acompanhamento detalhado da sua evolução acadêmica</p>
-                        </div>
-                    </div>
-
-                    <div class="stats-overview-grid">
-                        <div class="stat-card-big">
-                            <div class="scb-icon"><i class="fa-solid fa-graduation-cap"></i></div>
-                            <div class="scb-data">
-                                <span class="scb-number" id="prog-pct-big">0%</span>
-                                <span class="scb-label">Formação Concluída</span>
-                            </div>
-                        </div>
-                        <div class="stat-card-big">
-                            <div class="scb-icon"><i class="fa-solid fa-calendar-check"></i></div>
-                            <div class="scb-data">
-                                <span class="scb-number" id="prog-days-big">0 / 395</span>
-                                <span class="scb-label">Dias Concluídos</span>
-                            </div>
-                        </div>
-                        <div class="stat-card-big">
-                            <div class="scb-icon"><i class="fa-solid fa-fire"></i></div>
-                            <div class="scb-data">
-                                <span class="scb-number" id="prog-streak-big">0</span>
-                                <span class="scb-label">Dias Consecutivos (Streak)</span>
-                            </div>
-                        </div>
-                        <div class="stat-card-big">
-                            <div class="scb-icon"><i class="fa-solid fa-layer-group"></i></div>
-                            <div class="scb-data">
-                                <span class="scb-number" id="prog-modules-big">0 / 17</span>
-                                <span class="scb-label">Módulos Finalizados</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="dashboard-grid">
-                        <div class="card">
-                            <h3>Evolução por Módulo</h3>
-                            <div class="modules-progress-list" id="modules-progress-bars"></div>
-                        </div>
-                        <div class="card">
-                            <h3>Calendário de Atividades (Heatmap Recente)</h3>
-                            <p class="hint-txt">Dias estudados nos últimos 30 dias</p>
-                            <div class="heatmap-grid" id="activity-heatmap"></div>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- PAGE 6: ANOTAÇÕES -->
-                <section id="page-anotacoes" class="page">
-                    <div class="page-header-flex">
-                        <div>
-                            <h2>Caderno de Anotações Pessoais</h2>
-                            <p>Espaço livre para registrar suas reflexões, pesquisas e sínteses</p>
-                        </div>
-                        <button class="btn-primary" id="btn-new-note">
-                            <i class="fa-solid fa-plus"></i> Nova Anotação
-                        </button>
-                    </div>
-
-                    <div class="notes-controls">
-                        <div class="search-box">
-                            <i class="fa-solid fa-magnifying-glass"></i>
-                            <input type="text" id="notes-search" placeholder="Pesquisar nas anotações...">
-                        </div>
-                    </div>
-
-                    <div class="notes-grid" id="notes-list-grid"></div>
-                </section>
-
-                <!-- PAGE 7: CONFIGURAÇÕES -->
-                <section id="page-configuracoes" class="page">
-                    <div class="page-header-flex">
-                        <div>
-                            <h2>Configurações do Planejador</h2>
-                            <p>Personalize sua jornada e gerencie seus dados acadêmicos</p>
-                        </div>
-                    </div>
-
-                    <div class="settings-card card">
-                        <div class="form-group">
-                            <label for="cfg-username">Nome da Estudante / Taróloga</label>
-                            <input type="text" id="cfg-username" value="Taróloga">
-                        </div>
-
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="cfg-start-date">Data de Início dos Estudos</label>
-                                <input type="date" id="cfg-start-date">
-                            </div>
-                            <div class="form-group">
-                                <label for="cfg-days-week">Dias de Estudo por Semana</label>
-                                <select id="cfg-days-week">
-                                    <option value="5">5 dias por semana (Seg a Sex)</option>
-                                    <option value="6">6 dias por semana (Seg a Sáb)</option>
-                                    <option value="7" selected>7 dias por semana (Todos os dias)</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <div class="form-group checkbox-group">
-                            <label>
-                                <input type="checkbox" id="cfg-reminders" checked> Ativar lembretes visuais e motivação diária
-                            </label>
-                        </div>
-
-                        <div class="settings-actions">
-                            <button class="btn-primary" id="btn-save-settings"><i class="fa-solid fa-floppy-disk"></i> Salvar Configurações</button>
-                        </div>
-
-                        <hr class="separator">
-
-                        <div class="danger-zone">
-                            <h3>Zona de Perigo</h3>
-                            <p>Reiniciar todo o progresso apagará todos os checklists, anotações e dias concluídos. Esta ação não pode ser desfeita.</p>
-                            <button class="btn-danger" id="btn-reset-data"><i class="fa-solid fa-triangle-exclamation"></i> Reiniciar Progresso da Formação</button>
-                        </div>
-                    </div>
-                </section>
-
-            </div>
-        </main>
-    </div>
-
-    <!-- MODAL FOR CARD DETAILS -->
-    <div class="modal-overlay" id="card-modal">
-        <div class="modal-card">
-            <button class="modal-close" id="modal-close-btn"><i class="fa-solid fa-xmark"></i></button>
-            <div class="modal-header">
-                <span id="modal-card-category" class="badge-module">Arcanos Maiores</span>
-                <span id="modal-card-num" class="badge-day">Carta 01</span>
-            </div>
-            <h2 id="modal-card-name">O Louco</h2>
-            <div class="modal-body-content">
-                <div class="mc-status-row">
-                    <span>Status de Estudo: <strong id="modal-card-status">Não Iniciado</strong></span>
-                    <span id="modal-card-dates">Início: - | Conclusão: -</span>
+                  )}
                 </div>
-                <h3>Tópicos Programados para esta Carta:</h3>
-                <ul class="modal-topics-list" id="modal-card-topics"></ul>
+              )}
             </div>
-            <div class="modal-footer">
-                <button class="btn-primary" id="modal-goto-day-btn">Ir para o Dia de Estudo</button>
-            </div>
-        </div>
+          );
+        })}
+      </div>
     </div>
+  );
+};
 
-    <!-- MODAL FOR EDITING / CREATING NOTE -->
-    <div class="modal-overlay" id="note-modal">
-        <div class="modal-card">
-            <button class="modal-close" id="note-modal-close"><i class="fa-solid fa-xmark"></i></button>
-            <h2 id="note-modal-title">Nova Anotação</h2>
-            <div class="form-group" style="margin-top: 15px;">
-                <label>Título da Anotação</label>
-                <input type="text" id="note-input-title" placeholder="Ex: Reflexão sobre o Arcano 0...">
-            </div>
-            <div class="form-group">
-                <label>Vincular a Módulo ou Carta (Opcional)</label>
-                <input type="text" id="note-input-tag" placeholder="Ex: Módulo 1 ou O Louco">
-            </div>
-            <div class="form-group">
-                <label>Conteúdo</label>
-                <textarea id="note-input-content" rows="6" placeholder="Escreva suas anotações aqui..."></textarea>
-            </div>
-            <div class="modal-footer">
-                <button class="btn-primary" id="note-save-btn">Salvar Anotação</button>
-            </div>
+// ============================================================================
+// PÁGINA C: ESTUDO DIÁRIO
+// ============================================================================
+
+interface DailyStudyProps {
+  state: PlannerState;
+  dayId: string;
+  onSelectDay: (dayId: string) => void;
+  onToggleTask: (dayId: string, taskId: string) => void;
+  onToggleDayComplete: (dayId: string) => void;
+  onToggleFavorite: (dayId: string) => void;
+  onMoveTask: (dayId: string, taskId: string, direction: 'up' | 'down') => void;
+  onSaveNotes: (dayId: string, personal: string, observations: string) => void;
+  onBackToSchedule: () => void;
+}
+
+const DailyStudyPage: React.FC<DailyStudyProps> = ({
+  state,
+  dayId,
+  onSelectDay,
+  onToggleTask,
+  onToggleDayComplete,
+  onToggleFavorite,
+  onMoveTask,
+  onSaveNotes,
+  onBackToSchedule,
+}) => {
+  const dayIndex = state.days.findIndex((d) => d.id === dayId);
+  const currentDay = state.days[dayIndex] || state.days[0];
+  const prevDay = dayIndex > 0 ? state.days[dayIndex - 1] : null;
+  const nextDay = dayIndex < state.days.length - 1 ? state.days[dayIndex + 1] : null;
+
+  const storedNotes = state.dayNotes[currentDay.id] || { personal: '', observations: '' };
+  const [personalText, setPersonalText] = useState(storedNotes.personal);
+  const [obsText, setObsText] = useState(storedNotes.observations);
+
+  // Sincronizar campos em branco quando navegar entre dias
+  useEffect(() => {
+    const notes = state.dayNotes[currentDay.id] || { personal: '', observations: '' };
+    setPersonalText(notes.personal);
+    setObsText(notes.observations);
+  }, [currentDay.id, state.dayNotes]);
+
+  const doneCount = currentDay.tasks.filter((t) => t.completed).length;
+  const totalCount = currentDay.tasks.length;
+  const dayPct = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 0;
+  const isDayDone = totalCount > 0 && doneCount === totalCount;
+  const isFav = state.favorites.includes(currentDay.id);
+
+  const scheduledDate = calculateScheduledDateForDayIndex(
+    dayIndex === -1 ? 0 : dayIndex,
+    state.settings.startDate,
+    state.settings.daysPerWeek
+  );
+
+  const linkedCard = currentDay.cardId
+    ? ALL_78_CARDS.find((c) => c.id === currentDay.cardId)
+    : undefined;
+
+  return (
+    <div className="space-y-6">
+      {/* Navegação Superior */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <button
+          onClick={onBackToSchedule}
+          className="text-xs font-medium text-[#A94F79] hover:underline flex items-center gap-1.5"
+        >
+          <ChevronLeft className="w-4 h-4" />
+          Voltar ao Cronograma Completo
+        </button>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => prevDay && onSelectDay(prevDay.id)}
+            disabled={!prevDay}
+            className="px-3.5 py-2 rounded-xl bg-white border border-[#F8DCE8] text-xs font-medium text-[#51434B] disabled:opacity-40 hover:border-[#D77FA5] flex items-center gap-1.5"
+          >
+            <ChevronLeft className="w-4 h-4 text-[#A94F79]" />
+            Dia anterior
+          </button>
+          <button
+            onClick={() => nextDay && onSelectDay(nextDay.id)}
+            disabled={!nextDay}
+            className="px-3.5 py-2 rounded-xl bg-white border border-[#F8DCE8] text-xs font-medium text-[#51434B] disabled:opacity-40 hover:border-[#D77FA5] flex items-center gap-1.5"
+          >
+            Próximo dia
+            <ChevronRight className="w-4 h-4 text-[#A94F79]" />
+          </button>
         </div>
-    </div>
+      </div>
 
-    <!-- Script JS -->
-    <script src="script.js"></script>
-</body>
-</html>
+      {/* Cabeçalho do Estudo Diário */}
+      <div className="bg-white rounded-3xl p-6 sm:p-8 border border-[#F8DCE8] shadow-xs">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <div className="flex flex-wrap items-center gap-2 mb-2">
+              <span className="px-3 py-1 rounded-full bg-[#A94F79] text-white text-xs font-bold">
+                Dia {String(currentDay.dayNumber).padStart(2, '0')}
+              </span>
+              <CelestialBadge variant="soft">{currentDay.moduleTitle}</CelestialBadge>
+              {linkedCard && (
+                <CelestialBadge variant="outline">
+                  Carta: {linkedCard.name}
+                </CelestialBadge>
+              )}
+              <span className="text-xs text-[#51434B]/65">
+                Data prevista: {formatDatePTBR(scheduledDate)}
+              </span>
+            </div>
+
+            <h2 className="font-serif-editorial text-3xl sm:text-4xl font-bold text-[#51434B]">
+              {currentDay.theme}
+            </h2>
+
+            {/* Objetivo do dia (puramente organizacional) */}
+            <div className="mt-3 p-3.5 rounded-2xl bg-[#FFF4F8] border border-[#F8DCE8]">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-[#A94F79] block">
+                Objetivo Organizacional do Dia
+              </span>
+              <p className="text-xs sm:text-sm text-[#51434B]/85 mt-0.5">{currentDay.objective}</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => onToggleFavorite(currentDay.id)}
+              className={`p-2.5 rounded-xl border transition-colors ${
+                isFav
+                  ? 'bg-[#FFF4F8] border-[#D77FA5] text-[#A94F79]'
+                  : 'bg-white border-[#F8DCE8] text-[#51434B]/60 hover:text-[#A94F79]'
+              }`}
+              title="Favoritar este dia"
+            >
+              <Star className={`w-4 h-4 ${isFav ? 'fill-current' : ''}`} />
+            </button>
+            <button
+              onClick={() => onToggleDayComplete(currentDay.id)}
+              className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 ${
+                isDayDone
+                  ? 'bg-[#A94F79] text-white'
+                  : 'bg-[#D77FA5] hover:bg-[#A94F79] text-white shadow-xs'
+              }`}
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              {isDayDone ? 'Dia Concluído' : 'Concluir dia'}
+            </button>
+          </div>
+        </div>
+
+        {/* Progresso do dia */}
+        <div className="mt-6 pt-5 border-t border-[#F8DCE8]">
+          <div className="flex items-center justify-between text-xs mb-1.5">
+            <span className="font-medium text-[#51434B]">Progresso dos tópicos de hoje</span>
+            <span className="font-bold text-[#A94F79]">
+              {doneCount} de {totalCount} concluídos ({dayPct}%)
+            </span>
+          </div>
+          <div className="w-full h-2.5 bg-[#FFF4F8] rounded-full overflow-hidden border border-[#F8DCE8]">
+            <div
+              className="h-full bg-gradient-to-r from-[#E9A9C3] to-[#A94F79] transition-all duration-300"
+              style={{ width: `${dayPct}%` }}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Checklist Interativo Completo */}
+      <div className="bg-white rounded-3xl p-6 sm:p-8 border border-[#F8DCE8] shadow-xs">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-serif-editorial text-2xl font-bold text-[#51434B]">
+            Lista de Assuntos a Pesquisar e Estudar
+          </h3>
+          <span className="text-xs text-[#51434B]/65">
+            Marque conforme avançar em suas fontes e livros
+          </span>
+        </div>
+
+        <div className="space-y-2.5">
+          {currentDay.tasks.map((task, idx) => (
+            <div
+              key={task.id}
+              className={`flex items-center justify-between gap-2 p-3.5 rounded-2xl border transition-all ${
+                task.completed
+                  ? 'bg-[#FFF4F8]/80 border-[#F8DCE8]'
+                  : 'bg-white border-[#F8DCE8] hover:border-[#D77FA5]'
+              }`}
+            >
+              <button
+                onClick={() => onToggleTask(currentDay.id, task.id)}
+                className="flex-1 text-left flex items-center gap-3"
+              >
+                {task.completed ? (
+                  <CheckCircle2 className="w-5 h-5 text-[#A94F79] shrink-0" />
+                ) : (
+                  <Circle className="w-5 h-5 text-[#D77FA5] shrink-0" />
+                )}
+                <span
+                  className={`text-sm ${
+                    task.completed ? 'line-through text-[#51434B]/55' : 'text-[#51434B] font-medium'
+                  }`}
+                >
+                  <span className="text-xs text-[#D77FA5] font-semibold mr-2">
+                    {String(idx + 1).padStart(2, '0')}.
+                  </span>
+                  {task.title}
+                </span>
+              </button>
+
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => onMoveTask(currentDay.id, task.id, 'up')}
+                  disabled={idx === 0}
+                  className="p-1.5 rounded-lg text-[#51434B]/45 hover:text-[#A94F79] disabled:opacity-25"
+                  title="Mover tópico para cima"
+                >
+                  <ArrowUp className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={() => onMoveTask(currentDay.id, task.id, 'down')}
+                  disabled={idx === currentDay.tasks.length - 1}
+                  className="p-1.5 rounded-lg text-[#51434B]/45 hover:text-[#A94F79] disabled:opacity-25"
+                  title="Mover tópico para baixo"
+                >
+                  <ArrowDown className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Espaços em Branco para Anotações Pessoais e Observações */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="bg-white rounded-3xl p-6 border border-[#F8DCE8] shadow-xs flex flex-col">
+          <label
+            htmlFor="personal-notes-area"
+            className="font-serif-editorial text-xl font-bold text-[#51434B] mb-1"
+          >
+            Anotações Pessoais
+          </label>
+          <p className="text-xs text-[#51434B]/65 mb-3">
+            Espaço livre para registrar suas sínteses, referências bibliográficas e descobertas.
+          </p>
+          <textarea
+            id="personal-notes-area"
+            rows={7}
+            value={personalText}
+            onChange={(e) => setPersonalText(e.target.value)}
+            placeholder="Escreva aqui suas anotações pessoais sobre os tópicos deste dia..."
+            className="w-full flex-1 p-4 rounded-2xl bg-[#FFF4F8] border border-[#F8DCE8] focus:border-[#D77FA5] focus:bg-white focus:outline-none text-sm text-[#51434B] resize-y"
+          />
+        </div>
+
+        <div className="bg-white rounded-3xl p-6 border border-[#F8DCE8] shadow-xs flex flex-col">
+          <label
+            htmlFor="observations-area"
+            className="font-serif-editorial text-xl font-bold text-[#51434B] mb-1"
+          >
+            Observações e Pontos de Revisão
+          </label>
+          <p className="text-xs text-[#51434B]/65 mb-3">
+            Registre dúvidas para pesquisar posteriormente, páginas de livros ou conexões simbólicas.
+          </p>
+          <textarea
+            id="observations-area"
+            rows={7}
+            value={obsText}
+            onChange={(e) => setObsText(e.target.value)}
+            placeholder="Adicione observações, fontes consultadas ou pendências de pesquisa..."
+            className="w-full flex-1 p-4 rounded-2xl bg-[#FFF4F8] border border-[#F8DCE8] focus:border-[#D77FA5] focus:bg-white focus:outline-none text-sm text-[#51434B] resize-y"
+          />
+        </div>
+      </div>
+
+      {/* Rodapé de Ações do Dia */}
+      <div className="bg-white rounded-2xl p-4 border border-[#F8DCE8] flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => prevDay && onSelectDay(prevDay.id)}
+            disabled={!prevDay}
+            className="px-4 py-2 rounded-xl bg-[#FFF4F8] text-[#51434B] text-xs font-medium disabled:opacity-40 hover:bg-[#F8DCE8]/60"
+          >
+            ← Dia anterior
+          </button>
+          <button
+            onClick={() => nextDay && onSelectDay(nextDay.id)}
+            disabled={!nextDay}
+            className="px-4 py-2 rounded-xl bg-[#FFF4F8] text-[#51434B] text-xs font-medium disabled:opacity-40 hover:bg-[#F8DCE8]/60"
+          >
+            Próximo dia →
+          </button>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => onSaveNotes(currentDay.id, personalText, obsText)}
+            className="px-5 py-2.5 rounded-xl bg-white border border-[#D77FA5] text-[#A94F79] hover:bg-[#FFF4F8] text-xs sm:text-sm font-semibold transition-colors"
+          >
+            Salvar progresso
+          </button>
+          <button
+            onClick={() => {
+              onSaveNotes(currentDay.id, personalText, obsText);
+              if (!isDayDone) onToggleDayComplete(currentDay.id);
+            }}
+            className="px-5 py-2.5 rounded-xl bg-[#A94F79] hover:bg-[#8E3E63] text-white text-xs sm:text-sm font-semibold transition-colors"
+          >
+            {isDayDone ? 'Salvar e manter concluído' : 'Salvar e concluir dia'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ============================================================================
+// PÁGINA D: BIBLIOTECA DE CARTAS (EXCLUSIVAMENTE ORGANIZACIONAL)
+// ============================================================================
+
+interface CardLibraryProps {
+  state: PlannerState;
+  metrics: any;
+  onOpenDay: (dayId: string) => void;
+}
+
+const CardLibraryPage: React.FC<CardLibraryProps> = ({ state, metrics, onOpenDay }) => {
+  const [activeSuit, setActiveSuit] = useState<'all' | SuitType>('all');
+  const [searchCard, setSearchCard] = useState('');
+  const [modalCard, setModalCard] = useState<TarotCardMeta | null>(null);
+
+  const suitTabs: { id: 'all' | SuitType; label: string; count: number }[] = [
+    { id: 'all', label: 'Todas as Cartas', count: 78 },
+    { id: 'major', label: 'Arcanos Maiores', count: 22 },
+    { id: 'wands', label: 'Paus', count: 14 },
+    { id: 'cups', label: 'Copas', count: 14 },
+    { id: 'swords', label: 'Espadas', count: 14 },
+    { id: 'pentacles', label: 'Ouros', count: 14 },
+  ];
+
+  const filteredCards = useMemo(() => {
+    const q = searchCard.trim().toLowerCase();
+    return ALL_78_CARDS.filter((c) => {
+      if (activeSuit !== 'all' && c.suit !== activeSuit) return false;
+      if (q) {
+        return (
+          c.name.toLowerCase().includes(q) ||
+          c.numberLabel.toLowerCase().includes(q) ||
+          c.suitLabel.toLowerCase().includes(q)
+        );
+      }
+      return true;
+    });
+  }, [activeSuit, searchCard]);
+
+  const modalCardDays = useMemo(() => {
+    if (!modalCard) return [];
+    return state.days.filter((d) => d.cardId === modalCard.id);
+  }, [modalCard, state.days]);
+
+  return (
+    <div className="space-y-6">
+      {/* Cabeçalho */}
+      <div className="bg-white rounded-3xl p-6 border border-[#F8DCE8] shadow-xs">
+        <CelestialBadge>Catálogo Organizacional • 78 Arcanos</CelestialBadge>
+        <h2 className="font-serif-editorial text-3xl font-bold text-[#51434B] mt-2">
+          Biblioteca de Cartas do Tarot
+        </h2>
+        <p className="text-sm text-[#51434B]/75 mt-1">
+          Acompanhamento estrutural do status de estudo, datas e dias programados para cada uma das 78 lâminas.
+        </p>
+
+        {/* Abas de Naipes e Busca */}
+        <div className="mt-5 pt-5 border-t border-[#F8DCE8] flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex flex-wrap gap-1.5">
+            {suitTabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveSuit(tab.id)}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                  activeSuit === tab.id
+                    ? 'bg-[#A94F79] text-white'
+                    : 'bg-[#FFF4F8] text-[#51434B] border border-[#F8DCE8] hover:border-[#D77FA5]'
+                }`}
+              >
+                {tab.label} ({tab.count})
+              </button>
+            ))}
+          </div>
+
+          <div className="relative w-full md:w-64">
+            <Search className="w-4 h-4 text-[#D77FA5] absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchCard}
+              onChange={(e) => setSearchCard(e.target.value)}
+              placeholder="Buscar carta..."
+              className="w-full pl-9 pr-3 py-2 rounded-xl bg-[#FFF4F8] border border-[#F8DCE8] focus:border-[#D77FA5] focus:bg-white focus:outline-none text-xs"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Grid das 78 Cartas */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {filteredCards.map((card) => {
+          const stats = metrics.cardTaskStats[card.id] || {
+            totalTasks: 0,
+            completedTasks: 0,
+            dayIds: [],
+          };
+          const pct =
+            stats.totalTasks > 0
+              ? Math.round((stats.completedTasks / stats.totalTasks) * 100)
+              : 0;
+
+          let statusLabel = 'Não iniciada';
+          let statusStyle = 'bg-[#FFF4F8] text-[#51434B]/70 border-[#F8DCE8]';
+          if (stats.completedTasks > 0 && stats.completedTasks < stats.totalTasks) {
+            statusLabel = 'Em andamento';
+            statusStyle = 'bg-[#F8DCE8] text-[#A94F79] border-[#E9A9C3]';
+          } else if (stats.totalTasks > 0 && stats.completedTasks === stats.totalTasks) {
+            statusLabel = 'Concluída';
+            statusStyle = 'bg-[#A94F79] text-white border-[#A94F79]';
+          }
+
+          const dates = state.cardDates[card.id] || {};
+
+          return (
+            <div
+              key={card.id}
+              className="bg-white rounded-2xl p-5 border border-[#F8DCE8] hover:border-[#E9A9C3] shadow-xs flex flex-col justify-between transition-all"
+            >
+              <div>
+                <div className="flex items-start justify-between gap-2">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-[#D77FA5]">
+                    {card.suitLabel}
+                  </span>
+                  <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium border ${statusStyle}`}>
+                    {statusLabel}
+                  </span>
+                </div>
+
+                <div className="mt-2 flex items-baseline gap-2">
+                  <span className="font-serif-editorial text-lg font-bold text-[#A94F79]">
+                    {card.numberLabel}
+                  </span>
+                  <h3 className="font-serif-editorial text-xl font-bold text-[#51434B]">
+                    {card.name}
+                  </h3>
+                </div>
+
+                {/* Progresso da Carta */}
+                <div className="mt-3">
+                  <div className="flex items-center justify-between text-[11px] text-[#51434B]/70 mb-1">
+                    <span>
+                      {stats.completedTasks}/{stats.totalTasks} tópicos
+                    </span>
+                    <span className="font-semibold text-[#A94F79]">{pct}%</span>
+                  </div>
+                  <div className="w-full h-1.5 bg-[#FFF4F8] rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-[#D77FA5] transition-all duration-300"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* Datas de Início e Conclusão */}
+                <div className="mt-4 pt-3 border-t border-[#F8DCE8] grid grid-cols-2 gap-2 text-[11px]">
+                  <div>
+                    <span className="text-[#51434B]/55 block">Início</span>
+                    <span className="font-medium text-[#51434B]">
+                      {formatDatePTBR(dates.startedAt)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[#51434B]/55 block">Conclusão</span>
+                    <span className="font-medium text-[#51434B]">
+                      {formatDatePTBR(dates.completedAt)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setModalCard(card)}
+                className="mt-4 w-full py-2 px-3 rounded-xl bg-[#FFF4F8] hover:bg-[#F8DCE8]/70 text-[#A94F79] border border-[#E9A9C3]/60 text-xs font-semibold transition-colors flex items-center justify-center gap-1.5"
+              >
+                <Eye className="w-3.5 h-3.5" />
+                Ver tópicos programados ({stats.dayIds.length} dias)
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Modal de Tópicos Programados da Carta */}
+      {modalCard && (
+        <div
+          className="fixed inset-0 z-50 bg-[#51434B]/40 backdrop-blur-xs flex items-center justify-center p-4"
+          onClick={() => setModalCard(null)}
+        >
+          <div
+            className="bg-white rounded-3xl max-w-2xl w-full max-h-[85vh] overflow-hidden border border-[#E9A9C3] shadow-xl flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-6 border-b border-[#F8DCE8] flex items-start justify-between gap-4 bg-[#FFF4F8]/60">
+              <div>
+                <span className="text-xs font-semibold text-[#D77FA5] uppercase tracking-wider">
+                  {modalCard.suitLabel} • Lâmina {modalCard.numberLabel}
+                </span>
+                <h3 className="font-serif-editorial text-2xl font-bold text-[#51434B]">
+                  {modalCard.name} — Cronograma da Carta
+                </h3>
+              </div>
+              <button
+                onClick={() => setModalCard(null)}
+                className="p-2 rounded-xl bg-white border border-[#F8DCE8] text-[#51434B] hover:text-[#A94F79]"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto space-y-4">
+              {modalCardDays.map((day) => {
+                const done = day.tasks.filter((t) => t.completed).length;
+                return (
+                  <div
+                    key={day.id}
+                    className="p-4 rounded-2xl bg-[#FFF4F8]/50 border border-[#F8DCE8]"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                      <div>
+                        <span className="text-xs font-bold text-[#A94F79]">
+                          Dia {String(day.dayNumber).padStart(2, '0')}
+                        </span>
+                        <h4 className="text-sm font-semibold text-[#51434B]">{day.theme}</h4>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setModalCard(null);
+                          onOpenDay(day.id);
+                        }}
+                        className="px-3 py-1.5 rounded-xl bg-[#D77FA5] hover:bg-[#A94F79] text-white text-xs font-semibold"
+                      >
+                        Estudar este dia ({done}/{day.tasks.length})
+                      </button>
+                    </div>
+                    <ul className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 mt-3">
+                      {day.tasks.map((t) => (
+                        <li
+                          key={t.id}
+                          className="text-xs flex items-center gap-2 text-[#51434B]/85"
+                        >
+                          {t.completed ? (
+                            <CheckCircle2 className="w-3.5 h-3.5 text-[#A94F79] shrink-0" />
+                          ) : (
+                            <Circle className="w-3.5 h-3.5 text-[#D77FA5] shrink-0" />
+                          )}
+                          <span className={t.completed ? 'line-through opacity-60' : ''}>
+                            {t.title}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ============================================================================
+// PÁGINA E: MEU PROGRESSO
+// ============================================================================
+
+interface ProgressPageProps {
+  state: PlannerState;
+  metrics: any;
+  onOpenDay: (dayId: string) => void;
+}
+
+const ProgressPage: React.FC<ProgressPageProps> = ({ state, metrics }) => {
+  // Últimos 7 dias para evolução semanal
+  const last7DaysData = useMemo(() => {
+    const arr: { date: string; label: string; tasks: number }[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
+        d.getDate()
+      ).padStart(2, '0')}`;
+      const label = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+      arr.push({
+        date: iso,
+        label,
+        tasks: state.activityLog[iso]?.tasksCompleted || 0,
+      });
+    }
+    return arr;
+  }, [state.activityLog]);
+
+  // Últimas 4 semanas para evolução mensal
+  const last4WeeksData = useMemo(() => {
+    const weeks: { label: string; tasks: number }[] = [];
+    for (let w = 3; w >= 0; w--) {
+      let sum = 0;
+      for (let d = 0; d < 7; d++) {
+        const dt = new Date();
+        dt.setDate(dt.getDate() - (w * 7 + d));
+        const iso = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(
+          dt.getDate()
+        ).padStart(2, '0')}`;
+        sum += state.activityLog[iso]?.tasksCompleted || 0;
+      }
+      weeks.push({
+        label: w === 0 ? 'Semana Atual' : `Há ${w} sem.`,
+        tasks: sum,
+      });
+    }
+    return weeks;
+  }, [state.activityLog]);
+
+  // Últimos 28 dias para mapa de calor de atividades
+  const heatmap28Days = useMemo(() => {
+    const arr: { iso: string; count: number; label: string }[] = [];
+    for (let i = 27; i >= 0; i--) {
+      const dt = new Date();
+      dt.setDate(dt.getDate() - i);
+      const iso = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(
+        dt.getDate()
+      ).padStart(2, '0')}`;
+      arr.push({
+        iso,
+        count: state.activityLog[iso]?.tasksCompleted || 0,
+        label: formatDatePTBR(iso),
+      });
+    }
+    return arr;
+  }, [state.activityLog]);
+
+  const maxWeeklyVal = Math.max(5, ...last7DaysData.map((d) => d.tasks));
+  const maxMonthlyVal = Math.max(10, ...last4WeeksData.map((w) => w.tasks));
+
+  const recentHistory = useMemo(() => {
+    return Object.values(state.activityLog)
+      .filter((entry) => entry.tasksCompleted > 0 || entry.daysCompleted > 0)
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .slice(0, 10);
+  }, [state.activityLog]);
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white rounded-3xl p-6 border border-[#F8DCE8] shadow-xs">
+        <CelestialBadge>Estatísticas Reais</CelestialBadge>
+        <h2 className="font-serif-editorial text-3xl font-bold text-[#51434B] mt-2">
+          Meu Progresso Acadêmico
+        </h2>
+        <p className="text-sm text-[#51434B]/75 mt-1">
+          Acompanhamento consolidado de dias estudados, tarefas concluídas, módulos finalizados e constância.
+        </p>
+
+        {/* Grid de 6 Métricas Principais */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mt-6">
+          <div className="p-4 rounded-2xl bg-[#FFF4F8] border border-[#F8DCE8]">
+            <span className="text-[11px] text-[#51434B]/70 block">Concluído</span>
+            <strong className="font-serif-editorial text-2xl font-bold text-[#A94F79]">
+              {metrics.overallPercentage}%
+            </strong>
+          </div>
+          <div className="p-4 rounded-2xl bg-[#FFF4F8] border border-[#F8DCE8]">
+            <span className="text-[11px] text-[#51434B]/70 block">Dias Estudados</span>
+            <strong className="font-serif-editorial text-2xl font-bold text-[#51434B]">
+              {metrics.completedDaysCount}
+            </strong>
+          </div>
+          <div className="p-4 rounded-2xl bg-[#FFF4F8] border border-[#F8DCE8]">
+            <span className="text-[11px] text-[#51434B]/70 block">Tarefas Feitas</span>
+            <strong className="font-serif-editorial text-2xl font-bold text-[#51434B]">
+              {metrics.completedTasks}
+            </strong>
+          </div>
+          <div className="p-4 rounded-2xl bg-[#FFF4F8] border border-[#F8DCE8]">
+            <span className="text-[11px] text-[#51434B]/70 block">Módulos Finalizados</span>
+            <strong className="font-serif-editorial text-2xl font-bold text-[#51434B]">
+              {metrics.completedModulesCount} / 17
+            </strong>
+          </div>
+          <div className="p-4 rounded-2xl bg-[#FFF4F8] border border-[#F8DCE8]">
+            <span className="text-[11px] text-[#51434B]/70 block">Cartas Estudadas</span>
+            <strong className="font-serif-editorial text-2xl font-bold text-[#51434B]">
+              {metrics.studiedCardsCount} / 78
+            </strong>
+          </div>
+          <div className="p-4 rounded-2xl bg-[#FFF4F8] border border-[#F8DCE8]">
+            <span className="text-[11px] text-[#51434B]/70 block">Dias Consecutivos</span>
+            <strong className="font-serif-editorial text-2xl font-bold text-[#A94F79]">
+              {metrics.currentStreak}
+            </strong>
+          </div>
+        </div>
+      </div>
+
+      {/* Gráficos de Evolução Semanal e Mensal */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Evolução Semanal */}
+        <div className="bg-white rounded-3xl p-6 border border-[#F8DCE8] shadow-xs">
+          <h3 className="font-serif-editorial text-xl font-bold text-[#51434B]">
+            Evolução Semanal (Últimos 7 dias)
+          </h3>
+          <p className="text-xs text-[#51434B]/65 mb-5">
+            Quantidade de tópicos concluídos por dia
+          </p>
+          <div className="h-44 flex items-end justify-between gap-2 pt-4 px-2 border-b border-[#F8DCE8]">
+            {last7DaysData.map((item) => {
+              const barHeightPct = Math.round((item.tasks / maxWeeklyVal) * 100);
+              return (
+                <div key={item.date} className="flex-1 flex flex-col items-center gap-1.5">
+                  <span className="text-[11px] font-semibold text-[#A94F79]">{item.tasks}</span>
+                  <div className="w-full max-w-[34px] h-28 bg-[#FFF4F8] rounded-t-xl flex items-end overflow-hidden border border-[#F8DCE8]">
+                    <div
+                      className="w-full bg-gradient-to-t from-[#A94F79] to-[#E9A9C3] rounded-t-lg transition-all duration-500"
+                      style={{ height: `${Math.max(item.tasks > 0 ? 12 : 0, barHeightPct)}%` }}
+                    />
+                  </div>
+                  <span className="text-[10px] text-[#51434B]/70">{item.label}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Evolução Mensal */}
+        <div className="bg-white rounded-3xl p-6 border border-[#F8DCE8] shadow-xs">
+          <h3 className="font-serif-editorial text-xl font-bold text-[#51434B]">
+            Evolução Mensal (Últimas 4 semanas)
+          </h3>
+          <p className="text-xs text-[#51434B]/65 mb-5">
+            Volume semanal acumulado de tópicos estudados
+          </p>
+          <div className="h-44 flex items-end justify-between gap-4 pt-4 px-4 border-b border-[#F8DCE8]">
+            {last4WeeksData.map((wk) => {
+              const barHeightPct = Math.round((wk.tasks / maxMonthlyVal) * 100);
+              return (
+                <div key={wk.label} className="flex-1 flex flex-col items-center gap-1.5">
+                  <span className="text-[11px] font-semibold text-[#A94F79]">{wk.tasks}</span>
+                  <div className="w-full max-w-[48px] h-28 bg-[#FFF4F8] rounded-t-xl flex items-end overflow-hidden border border-[#F8DCE8]">
+                    <div
+                      className="w-full bg-gradient-to-t from-[#D77FA5] to-[#F8DCE8] rounded-t-lg transition-all duration-500"
+                      style={{ height: `${Math.max(wk.tasks > 0 ? 12 : 0, barHeightPct)}%` }}
+                    />
+                  </div>
+                  <span className="text-[10px] text-[#51434B]/70 text-center">{wk.label}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Calendário de Atividades (28 dias) + Histórico */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div className="lg:col-span-6 bg-white rounded-3xl p-6 border border-[#F8DCE8] shadow-xs">
+          <h3 className="font-serif-editorial text-xl font-bold text-[#51434B]">
+            Calendário de Atividades (Últimos 28 dias)
+          </h3>
+          <p className="text-xs text-[#51434B]/65 mb-4">
+            Intensidade diária de tópicos concluídos
+          </p>
+          <div className="grid grid-cols-7 gap-2">
+            {heatmap28Days.map((cell) => {
+              let bg = 'bg-[#FFF4F8] border-[#F8DCE8]';
+              if (cell.count >= 8) bg = 'bg-[#A94F79] border-[#A94F79] text-white';
+              else if (cell.count >= 4) bg = 'bg-[#D77FA5] border-[#D77FA5] text-white';
+              else if (cell.count >= 1) bg = 'bg-[#F8DCE8] border-[#E9A9C3] text-[#A94F79]';
+
+              return (
+                <div
+                  key={cell.iso}
+                  title={`${cell.label}: ${cell.count} tópicos concluídos`}
+                  className={`aspect-square rounded-xl border flex flex-col items-center justify-center text-[10px] font-medium ${bg}`}
+                >
+                  <span>{cell.label.slice(0, 5)}</span>
+                  <span className="font-bold">{cell.count}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="lg:col-span-6 bg-white rounded-3xl p-6 border border-[#F8DCE8] shadow-xs">
+          <h3 className="font-serif-editorial text-xl font-bold text-[#51434B]">
+            Histórico Recente de Estudos
+          </h3>
+          <p className="text-xs text-[#51434B]/65 mb-4">
+            Registros salvos automaticamente ao concluir tarefas
+          </p>
+
+          {recentHistory.length === 0 ? (
+            <div className="p-8 rounded-2xl bg-[#FFF4F8] border border-[#F8DCE8] text-center">
+              <Moon className="w-6 h-6 text-[#D77FA5] mx-auto mb-2" />
+              <p className="text-xs text-[#51434B]/75">
+                Nenhuma atividade registrada ainda. Marque seu primeiro tópico como concluído para iniciar seu histórico.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {recentHistory.map((item) => (
+                <div
+                  key={item.date}
+                  className="p-3 rounded-2xl bg-[#FFF4F8]/70 border border-[#F8DCE8] flex items-center justify-between text-xs"
+                >
+                  <span className="font-semibold text-[#51434B]">{formatDatePTBR(item.date)}</span>
+                  <div className="flex items-center gap-3">
+                    <span className="text-[#A94F79] font-medium">
+                      {item.tasksCompleted} {item.tasksCompleted === 1 ? 'tópico' : 'tópicos'}
+                    </span>
+                    {item.daysCompleted > 0 && (
+                      <CelestialBadge variant="soft">
+                        +{item.daysCompleted} {item.daysCompleted === 1 ? 'dia' : 'dias'}
+                      </CelestialBadge>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Progresso Detalhado por Módulo */}
+      <div className="bg-white rounded-3xl p-6 border border-[#F8DCE8] shadow-xs">
+        <h3 className="font-serif-editorial text-2xl font-bold text-[#51434B] mb-4">
+          Progresso por Módulo
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {MODULES_CATALOG.map((mod) => {
+            const st = metrics.moduleStats[mod.id] || {
+              totalDays: 0,
+              completedDays: 0,
+              totalTasks: 0,
+              completedTasks: 0,
+            };
+            const pct = st.totalTasks > 0 ? Math.round((st.completedTasks / st.totalTasks) * 100) : 0;
+            return (
+              <div key={mod.id} className="p-4 rounded-2xl bg-[#FFF4F8]/50 border border-[#F8DCE8]">
+                <div className="flex items-center justify-between gap-2 mb-1.5">
+                  <span className="text-xs font-bold text-[#51434B] truncate">{mod.title}</span>
+                  <span className="text-xs font-bold text-[#A94F79] shrink-0">{pct}%</span>
+                </div>
+                <div className="w-full h-2 bg-white rounded-full overflow-hidden border border-[#F8DCE8]">
+                  <div
+                    className="h-full bg-[#D77FA5] transition-all duration-300"
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+                <div className="mt-1.5 flex items-center justify-between text-[11px] text-[#51434B]/65">
+                  <span>
+                    {st.completedDays}/{st.totalDays} dias
+                  </span>
+                  <span>
+                    {st.completedTasks}/{st.totalTasks} tópicos
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ============================================================================
+// PÁGINA F: ANOTAÇÕES (CADERNO PESSOAL INDEPENDENTE)
+// ============================================================================
+
+interface NotesPageProps {
+  state: PlannerState;
+  onAddNote: (note: PersonalNote) => void;
+  onUpdateNote: (note: PersonalNote) => void;
+  onDeleteNote: (id: string) => void;
+}
+
+const NotesPage: React.FC<NotesPageProps> = ({
+  state,
+  onAddNote,
+  onUpdateNote,
+  onDeleteNote,
+}) => {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterModuleId, setFilterModuleId] = useState<string>('all');
+  const [filterCardId, setFilterCardId] = useState<string>('all');
+
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [editingNote, setEditingNote] = useState<PersonalNote | null>(null);
+  const [titleInput, setTitleInput] = useState('');
+  const [contentInput, setContentInput] = useState('');
+  const [selectedModInput, setSelectedModInput] = useState<string>('');
+  const [selectedCardInput, setSelectedCardInput] = useState<string>('');
+
+  const openCreateForm = () => {
+    setEditingNote(null);
+    setTitleInput('');
+    setContentInput('');
+    setSelectedModInput('');
+    setSelectedCardInput('');
+    setIsFormOpen(true);
+  };
+
+  const openEditForm = (note: PersonalNote) => {
+    setEditingNote(note);
+    setTitleInput(note.title);
+    setContentInput(note.content);
+    setSelectedModInput(note.moduleId ? String(note.moduleId) : '');
+    setSelectedCardInput(note.cardId || '');
+    setIsFormOpen(true);
+  };
+
+  const handleSaveForm = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!titleInput.trim() && !contentInput.trim()) return;
+    const nowISO = new Date().toISOString();
+
+    if (editingNote) {
+      onUpdateNote({
+        ...editingNote,
+        title: titleInput.trim() || 'Anotação sem título',
+        content: contentInput,
+        moduleId: selectedModInput ? Number(selectedModInput) : undefined,
+        cardId: selectedCardInput || undefined,
+        updatedAt: nowISO,
+      });
+    } else {
+      onAddNote({
+        id: `note-${Date.now()}`,
+        title: titleInput.trim() || 'Anotação sem título',
+        content: contentInput,
+        moduleId: selectedModInput ? Number(selectedModInput) : undefined,
+        cardId: selectedCardInput || undefined,
+        createdAt: nowISO,
+        updatedAt: nowISO,
+      });
+    }
+    setIsFormOpen(false);
+  };
+
+  const filteredNotes = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return state.notes.filter((note) => {
+      if (filterModuleId !== 'all' && String(note.moduleId || '') !== filterModuleId) return false;
+      if (filterCardId !== 'all' && (note.cardId || '') !== filterCardId) return false;
+      if (q) {
+        return (
+          note.title.toLowerCase().includes(q) ||
+          note.content.toLowerCase().includes(q)
+        );
+      }
+      return true;
+    });
+  }, [state.notes, searchQuery, filterModuleId, filterCardId]);
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white rounded-3xl p-6 border border-[#F8DCE8] shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <CelestialBadge>Caderno Pessoal Independente</CelestialBadge>
+            <h2 className="font-serif-editorial text-3xl font-bold text-[#51434B] mt-2">
+              Minhas Anotações de Estudo
+            </h2>
+            <p className="text-sm text-[#51434B]/75 mt-1">
+              Registre fichamentos de livros, sínteses pessoais e organize por módulo ou por carta.
+            </p>
+          </div>
+          <button
+            onClick={openCreateForm}
+            className="px-5 py-2.5 rounded-xl bg-[#D77FA5] hover:bg-[#A94F79] text-white text-sm font-semibold shadow-xs transition-colors flex items-center gap-2 self-start sm:self-auto"
+          >
+            <Plus className="w-4 h-4" />
+            Nova anotação
+          </button>
+        </div>
+
+        {/* Barra de Pesquisa e Organização */}
+        <div className="mt-5 pt-5 border-t border-[#F8DCE8] grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="relative">
+            <Search className="w-4 h-4 text-[#D77FA5] absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Pesquisar nas anotações..."
+              className="w-full pl-10 pr-3 py-2 rounded-xl bg-[#FFF4F8] border border-[#F8DCE8] focus:border-[#D77FA5] focus:bg-white focus:outline-none text-xs"
+            />
+          </div>
+
+          <select
+            value={filterModuleId}
+            onChange={(e) => setFilterModuleId(e.target.value)}
+            className="px-3 py-2 rounded-xl bg-[#FFF4F8] border border-[#F8DCE8] focus:border-[#D77FA5] focus:bg-white focus:outline-none text-xs text-[#51434B]"
+          >
+            <option value="all">Todos os módulos</option>
+            {MODULES_CATALOG.map((m) => (
+              <option key={m.id} value={String(m.id)}>
+                {m.title}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={filterCardId}
+            onChange={(e) => setFilterCardId(e.target.value)}
+            className="px-3 py-2 rounded-xl bg-[#FFF4F8] border border-[#F8DCE8] focus:border-[#D77FA5] focus:bg-white focus:outline-none text-xs text-[#51434B]"
+          >
+            <option value="all">Todas as cartas (78)</option>
+            {ALL_78_CARDS.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.numberLabel} — {c.name} ({c.suitLabel})
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Formulário de Criação / Edição */}
+      {isFormOpen && (
+        <form
+          onSubmit={handleSaveForm}
+          className="bg-white rounded-3xl p-6 border-2 border-[#E9A9C3] shadow-sm space-y-4"
+        >
+          <div className="flex items-center justify-between">
+            <h3 className="font-serif-editorial text-2xl font-bold text-[#A94F79]">
+              {editingNote ? 'Editar Anotação' : 'Nova Anotação Pessoal'}
+            </h3>
+            <button
+              type="button"
+              onClick={() => setIsFormOpen(false)}
+              className="p-1.5 rounded-lg text-[#51434B]/60 hover:text-[#A94F79]"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <input
+              type="text"
+              value={titleInput}
+              onChange={(e) => setTitleInput(e.target.value)}
+              placeholder="Título da anotação..."
+              className="md:col-span-1 px-4 py-2.5 rounded-xl bg-[#FFF4F8] border border-[#F8DCE8] focus:border-[#D77FA5] focus:bg-white focus:outline-none text-sm"
+              required
+            />
+
+            <select
+              value={selectedModInput}
+              onChange={(e) => setSelectedModInput(e.target.value)}
+              className="px-3 py-2.5 rounded-xl bg-[#FFF4F8] border border-[#F8DCE8] focus:border-[#D77FA5] focus:bg-white focus:outline-none text-xs text-[#51434B]"
+            >
+              <option value="">Vincular a um Módulo (opcional)</option>
+              {MODULES_CATALOG.map((m) => (
+                <option key={m.id} value={String(m.id)}>
+                  {m.title}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={selectedCardInput}
+              onChange={(e) => setSelectedCardInput(e.target.value)}
+              className="px-3 py-2.5 rounded-xl bg-[#FFF4F8] border border-[#F8DCE8] focus:border-[#D77FA5] focus:bg-white focus:outline-none text-xs text-[#51434B]"
+            >
+              <option value="">Vincular a uma Carta (opcional)</option>
+              {ALL_78_CARDS.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.numberLabel} — {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <textarea
+            rows={6}
+            value={contentInput}
+            onChange={(e) => setContentInput(e.target.value)}
+            placeholder="Escreva aqui o conteúdo da sua anotação..."
+            className="w-full p-4 rounded-2xl bg-[#FFF4F8] border border-[#F8DCE8] focus:border-[#D77FA5] focus:bg-white focus:outline-none text-sm text-[#51434B]"
+            required
+          />
+
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setIsFormOpen(false)}
+              className="px-4 py-2 rounded-xl bg-[#FFF4F8] text-[#51434B] text-xs font-medium"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              className="px-5 py-2 rounded-xl bg-[#A94F79] text-white text-xs font-semibold"
+            >
+              Salvar anotação
+            </button>
+          </div>
+        </form>
+      )}
+
+      {/* Listagem de Anotações */}
+      {filteredNotes.length === 0 ? (
+        <div className="bg-white rounded-3xl p-12 border border-[#F8DCE8] text-center">
+          <Bookmark className="w-8 h-8 text-[#D77FA5] mx-auto mb-3" />
+          <h3 className="font-serif-editorial text-2xl font-bold text-[#51434B]">
+            Seu caderno está em branco
+          </h3>
+          <p className="text-xs sm:text-sm text-[#51434B]/70 max-w-md mx-auto mt-1">
+            Clique em &ldquo;Nova anotação&rdquo; para criar registros pessoais vinculados aos módulos ou às 78 cartas.
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {filteredNotes.map((note) => {
+            const mod = note.moduleId
+              ? MODULES_CATALOG.find((m) => m.id === note.moduleId)
+              : undefined;
+            const card = note.cardId
+              ? ALL_78_CARDS.find((c) => c.id === note.cardId)
+              : undefined;
+
+            return (
+              <div
+                key={note.id}
+                className="bg-white rounded-2xl p-5 border border-[#F8DCE8] shadow-xs flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex items-start justify-between gap-2">
+                    <h4 className="font-serif-editorial text-xl font-bold text-[#51434B]">
+                      {note.title}
+                    </h4>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        onClick={() => openEditForm(note)}
+                        className="p-1.5 rounded-lg text-[#51434B]/60 hover:text-[#A94F79] hover:bg-[#FFF4F8]"
+                        title="Editar"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => onDeleteNote(note.id)}
+                        className="p-1.5 rounded-lg text-[#51434B]/60 hover:text-rose-600 hover:bg-[#FFF4F8]"
+                        title="Excluir"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {mod && <CelestialBadge variant="soft">{mod.title}</CelestialBadge>}
+                    {card && <CelestialBadge variant="outline">Carta: {card.name}</CelestialBadge>}
+                  </div>
+
+                  <p className="mt-3 text-sm text-[#51434B]/85 whitespace-pre-wrap leading-relaxed">
+                    {note.content}
+                  </p>
+                </div>
+
+                <div className="mt-4 pt-3 border-t border-[#F8DCE8] text-[11px] text-[#51434B]/55">
+                  Atualizado em {new Date(note.updatedAt).toLocaleDateString('pt-BR')}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ============================================================================
+// PÁGINA G: CONFIGURAÇÕES
+// ============================================================================
+
+interface SettingsPageProps {
+  state: PlannerState;
+  onUpdateSettings: (settings: PlannerSettings) => void;
+  onImportBackup: (imported: PlannerState) => void;
+  onResetProgress: () => void;
+}
+
+const SettingsPage: React.FC<SettingsPageProps> = ({
+  state,
+  onUpdateSettings,
+  onImportBackup,
+  onResetProgress,
+}) => {
+  const [userName, setUserName] = useState(state.settings.userName);
+  const [startDate, setStartDate] = useState(state.settings.startDate);
+  const [daysPerWeek, setDaysPerWeek] = useState(state.settings.daysPerWeek);
+  const [targetPaceLabel, setTargetPaceLabel] = useState(state.settings.targetPaceLabel);
+  const [visualReminders, setVisualReminders] = useState(state.settings.visualReminders);
+
+  const [confirmResetStep, setConfirmResetStep] = useState<0 | 1 | 2>(0);
+
+  // Duração estimada em semanas com base nos dias totais e dias por semana
+  const estimatedWeeks = Math.ceil(state.days.length / Math.max(1, daysPerWeek));
+  const estimatedEndDate = calculateScheduledDateForDayIndex(
+    state.days.length - 1,
+    startDate,
+    daysPerWeek
+  );
+
+  const handleSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    onUpdateSettings({
+      userName: userName.trim() || 'Estudante',
+      startDate,
+      daysPerWeek,
+      targetPaceLabel,
+      visualReminders,
+    });
+  };
+
+  const handleExportJSON = () => {
+    const dataStr = JSON.stringify(state, null, 2);
+    const blob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `tarot-study-planner-backup-${getTodayISO()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportJSON = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(String(reader.result));
+        if (parsed && Array.isArray(parsed.days)) {
+          onImportBackup(parsed);
+        }
+      } catch {
+        // Ignora arquivo inválido silenciosamente
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  return (
+    <div className="space-y-6 max-w-3xl">
+      <div className="bg-white rounded-3xl p-6 sm:p-8 border border-[#F8DCE8] shadow-xs">
+        <CelestialBadge>Personalização do Planner</CelestialBadge>
+        <h2 className="font-serif-editorial text-3xl font-bold text-[#51434B] mt-2">
+          Configurações da Formação
+        </h2>
+        <p className="text-sm text-[#51434B]/75 mt-1">
+          Ajuste seu nome, data de início, frequência semanal e preferências de acompanhamento.
+        </p>
+
+        <form onSubmit={handleSave} className="mt-6 space-y-5">
+          <div>
+            <label className="block text-xs font-semibold text-[#51434B] mb-1.5">
+              Nome exibido na saudação
+            </label>
+            <input
+              type="text"
+              value={userName}
+              onChange={(e) => setUserName(e.target.value)}
+              className="w-full px-4 py-2.5 rounded-xl bg-[#FFF4F8] border border-[#F8DCE8] focus:border-[#D77FA5] focus:bg-white focus:outline-none text-sm"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-[#51434B] mb-1.5">
+                Data de início dos estudos
+              </label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="w-full px-4 py-2.5 rounded-xl bg-[#FFF4F8] border border-[#F8DCE8] focus:border-[#D77FA5] focus:bg-white focus:outline-none text-sm"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-[#51434B] mb-1.5">
+                Dias de estudo por semana ({daysPerWeek} {daysPerWeek === 1 ? 'dia' : 'dias'})
+              </label>
+              <select
+                value={daysPerWeek}
+                onChange={(e) => setDaysPerWeek(Number(e.target.value))}
+                className="w-full px-4 py-2.5 rounded-xl bg-[#FFF4F8] border border-[#F8DCE8] focus:border-[#D77FA5] focus:bg-white focus:outline-none text-sm"
+              >
+                {[1, 2, 3, 4, 5, 6, 7].map((n) => (
+                  <option key={n} value={n}>
+                    {n} {n === 1 ? 'dia por semana' : 'dias por semana'}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-[#51434B] mb-1.5">
+              Perfil de Duração / Ritmo da Formação
+            </label>
+            <select
+              value={targetPaceLabel}
+              onChange={(e) => {
+                const val = e.target.value;
+                setTargetPaceLabel(val);
+                if (val === 'Ritmo Intensivo (7 dias/semana)') setDaysPerWeek(7);
+                if (val === 'Ritmo Aprofundado (5 dias/semana)') setDaysPerWeek(5);
+                if (val === 'Ritmo Contemplativo (3 dias/semana)') setDaysPerWeek(3);
+              }}
+              className="w-full px-4 py-2.5 rounded-xl bg-[#FFF4F8] border border-[#F8DCE8] focus:border-[#D77FA5] focus:bg-white focus:outline-none text-sm"
+            >
+              <option value="Ritmo Intensivo (7 dias/semana)">Ritmo Intensivo (7 dias/semana)</option>
+              <option value="Ritmo Aprofundado (5 dias/semana)">Ritmo Aprofundado (5 dias/semana)</option>
+              <option value="Ritmo Contemplativo (3 dias/semana)">Ritmo Contemplativo (3 dias/semana)</option>
+              <option value="Ritmo Personalizado">Ritmo Personalizado</option>
+            </select>
+
+            <div className="mt-2.5 p-3.5 rounded-2xl bg-[#FFF4F8] border border-[#F8DCE8] text-xs text-[#51434B]/80 flex flex-wrap items-center justify-between gap-2">
+              <span>
+                Duração estimada: <strong>{estimatedWeeks} semanas</strong> ({state.days.length} dias letivos)
+              </span>
+              <span>
+                Conclusão prevista: <strong>{formatDatePTBR(estimatedEndDate)}</strong>
+              </span>
+            </div>
+          </div>
+
+          {/* Lembretes Visuais */}
+          <div className="flex items-center justify-between p-4 rounded-2xl bg-[#FFF4F8] border border-[#F8DCE8]">
+            <div>
+              <span className="text-sm font-semibold text-[#51434B] block">
+                Lembretes visuais no Dashboard
+              </span>
+              <span className="text-xs text-[#51434B]/70">
+                Exibe uma faixa discreta com sua meta semanal e o próximo dia programado.
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setVisualReminders(!visualReminders)}
+              className={`w-12 h-6 rounded-full transition-colors p-0.5 ${
+                visualReminders ? 'bg-[#A94F79]' : 'bg-[#E9A9C3]/50'
+              }`}
+              aria-label="Alternar lembretes visuais"
+            >
+              <div
+                className={`w-5 h-5 rounded-full bg-white transition-transform ${
+                  visualReminders ? 'translate-x-6' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+
+          <div className="pt-2">
+            <button
+              type="submit"
+              className="px-6 py-2.5 rounded-xl bg-[#D77FA5] hover:bg-[#A94F79] text-white text-sm font-semibold shadow-xs transition-colors"
+            >
+              Salvar configurações
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {/* Backup e Restauração */}
+      <div className="bg-white rounded-3xl p-6 border border-[#F8DCE8] shadow-xs">
+        <h3 className="font-serif-editorial text-xl font-bold text-[#51434B]">
+          Backup e Portabilidade de Dados
+        </h3>
+        <p className="text-xs text-[#51434B]/70 mt-1 mb-4">
+          Exporte seu progresso e suas anotações em formato JSON ou restaure um arquivo salvo anteriormente.
+        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={handleExportJSON}
+            className="px-4 py-2 rounded-xl bg-[#FFF4F8] border border-[#E9A9C3] text-[#A94F79] text-xs font-semibold hover:bg-[#F8DCE8]/50 flex items-center gap-2"
+          >
+            <Download className="w-4 h-4" />
+            Exportar backup (.json)
+          </button>
+
+          <label className="px-4 py-2 rounded-xl bg-white border border-[#F8DCE8] text-[#51434B] text-xs font-semibold hover:border-[#D77FA5] cursor-pointer flex items-center gap-2">
+            <Upload className="w-4 h-4 text-[#D77FA5]" />
+            Importar backup (.json)
+            <input type="file" accept=".json" onChange={handleImportJSON} className="hidden" />
+          </label>
+        </div>
+      </div>
+
+      {/* Zona de Reinício de Progresso mediante Confirmação */}
+      <div className="bg-white rounded-3xl p-6 border border-rose-200 shadow-xs">
+        <h3 className="font-serif-editorial text-xl font-bold text-[#A94F79]">
+          Reiniciar Progresso
+        </h3>
+        <p className="text-xs text-[#51434B]/75 mt-1 mb-4">
+          Esta ação desmarca todos os tópicos concluídos, limpa o histórico de atividades e retorna a formação para 0%.
+        </p>
+
+        {confirmResetStep === 0 && (
+          <button
+            onClick={() => setConfirmResetStep(1)}
+            className="px-4 py-2 rounded-xl bg-rose-50 text-rose-700 border border-rose-200 text-xs font-semibold hover:bg-rose-100"
+          >
+            Reiniciar progresso da formação
+          </button>
+        )}
+
+        {confirmResetStep === 1 && (
+          <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 space-y-3">
+            <p className="text-xs font-semibold text-rose-800">
+              Tem certeza absoluta? Todo o progresso marcado e as datas registradas serão apagados permanentemente.
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  onResetProgress();
+                  setConfirmResetStep(0);
+                }}
+                className="px-4 py-2 rounded-xl bg-rose-600 text-white text-xs font-semibold hover:bg-rose-700"
+              >
+                Sim, apagar progresso e reiniciar
+              </button>
+              <button
+                onClick={() => setConfirmResetStep(0)}
+                className="px-4 py-2 rounded-xl bg-white text-[#51434B] border border-[#F8DCE8] text-xs font-medium"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default App; 
