@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tarot Study Planner — Planejador de Estudos</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Stylesheet -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo-icon"><i class="fa-solid fa-moon"></i></div>
+                <div class="logo-text">
+                    <h1>Tarot Planner</h1>
+                    <span>Formação Acadêmica</span>
+                </div>
+            </div>
+
+            <nav class="sidebar-nav">
+                <button class="nav-item active" data-page="dashboard">
+                    <i class="fa-solid fa-house-chimney"></i> Dashboard
+                </button>
+                <button class="nav-item" data-page="cronograma">
+                    <i class="fa-solid fa-book-open"></i> Cronograma
+                </button>
+                <button class="nav-item" data-page="biblioteca">
+                    <i class="fa-solid fa-clone"></i> Biblioteca (78)
+                </button>
+                <button class="nav-item" data-page="progresso">
+                    <i class="fa-solid fa-chart-line"></i> Meu Progresso
+                </button>
+                <button class="nav-item" data-page="anotacoes">
+                    <i class="fa-solid fa-feather"></i> Anotações
+                </button>
+                <button class="nav-item" data-page="configuracoes">
+                    <i class="fa-solid fa-gear"></i> Configurações
+                </button>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="user-mini-card">
+                    <div class="avatar"><i class="fa-solid fa-sparkles"></i></div>
+                    <div class="user-info">
+                        <span id="sidebar-username" class="uname">Taróloga</span>
+                        <span id="sidebar-streak" class="ustreak"><i class="fa-solid fa-fire"></i> 0 dias de sequência</span>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- Top Bar -->
+            <header class="topbar">
+                <div class="topbar-left">
+                    <button id="mobile-toggle" class="mobile-toggle"><i class="fa-solid fa-bars"></i></button>
+                    <div class="current-date-display" id="header-date">Carregando data...</div>
+                </div>
+                <div class="topbar-right">
+                    <button class="quick-action-btn" id="btn-quick-continue">
+                        <i class="fa-solid fa-play"></i> Continuar de onde parei
+                    </button>
+                </div>
+            </header>
+
+            <!-- Pages Wrapper -->
+            <div class="pages-container">
+
+                <!-- PAGE 1: DASHBOARD -->
+                <section id="page-dashboard" class="page active">
+                    <div class="welcome-banner">
+                        <div class="welcome-text">
+                            <h2 id="dash-greeting">Olá, Taróloga!</h2>
+                            <p>Sua jornada mística e acadêmica pelo Tarot está organizada. Mantenha a constância.</p>
+                        </div>
+                        <div class="welcome-stats-mini">
+                            <div class="mini-stat">
+                                <span class="ms-val" id="dash-day-num">Dia 01</span>
+                                <span class="ms-lbl">Dia Atual</span>
+                            </div>
+                            <div class="mini-stat">
+                                <span class="ms-val" id="dash-total-pct">0%</span>
+                                <span class="ms-lbl">Concluído</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Today's Study Highlight Card -->
+                    <div class="today-highlight-card">
+                        <div class="thc-header">
+                            <span class="badge-module" id="dash-today-module">Módulo 1 — Fundamentos do Tarot</span>
+                            <span class="badge-day" id="dash-today-daylabel">Dia 1 de 395</span>
+                        </div>
+                        <h3 id="dash-today-title">História e Origem do Tarot</h3>
+                        <p class="thc-subtitle">Objetivo organizacional do dia (Conteúdo puramente externo para pesquisa)</p>
+                        <div class="thc-checklist" id="dash-today-checklist"></div>
+                        <div class="thc-footer">
+                            <button class="btn-primary" id="btn-goto-study">
+                                <i class="fa-solid fa-book-bookmark"></i> Abrir Estudo Diário
+                            </button>
+                            <span class="thc-status" id="dash-today-status">Status: Não concluído</span>
+                        </div>
+                    </div>
+
+                    <!-- Grid of stats & calendar -->
+                    <div class="dashboard-grid">
+                        <div class="dash-col-left">
+                            <div class="card general-progress-card">
+                                <h3>Progresso Geral da Formação</h3>
+                                <div class="progress-bar-wrap">
+                                    <div class="progress-bar-fill" id="overall-progress-fill" style="width: 0%;"></div>
+                                </div>
+                                <div class="progress-labels">
+                                    <span id="overall-progress-text">0 de 395 dias concluídos (0%)</span>
+                                    <span id="dash-tasks-count">0 tarefas feitas</span>
+                                </div>
+                                <div class="stats-subgrid">
+                                    <div class="ss-item">
+                                        <i class="fa-solid fa-fire"></i>
+                                        <div>
+                                            <strong id="stat-streak">0 dias</strong>
+                                            <span>Streak Atual</span>
+                                        </div>
+                                    </div>
+                                    <div class="ss-item">
+                                        <i class="fa-solid fa-clone"></i>
+                                        <div>
+                                            <strong id="stat-cards">0 / 78</strong>
+                                            <span>Cartas Estudadas</span>
+                                        </div>
+                                    </div>
+                                    <div class="ss-item">
+                                        <i class="fa-solid fa-layer-group"></i>
+                                        <div>
+                                            <strong id="stat-modules">0 / 17</strong>
+                                            <span>Módulos Concluídos</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="card next-studies-card">
+                                <h3>Próximos Estudos na Fila</h3>
+                                <div class="next-list" id="dash-next-list"></div>
+                            </div>
+                        </div>
+
+                        <div class="dash-col-right">
+                            <div class="card mini-calendar-card">
+                                <div class="cal-header">
+                                    <h3 id="cal-month-year">Novembro 2026</h3>
+                                    <div class="cal-nav">
+                                        <button id="cal-prev"><i class="fa-solid fa-chevron-left"></i></button>
+                                        <button id="cal-next"><i class="fa-solid fa-chevron-right"></i></button>
+                                    </div>
+                                </div>
+                                <div class="cal-weekdays">
+                                    <span>Dom</span><span>Seg</span><span>Ter</span><span>Qua</span><span>Qui</span><span>Sex</span><span>Sáb</span>
+                                </div>
+                                <div class="cal-grid" id="calendar-days-grid"></div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- PAGE 2: CRONOGRAMA COMPLETO -->
+                <section id="page-cronograma" class="page">
+                    <div class="page-header-flex">
+                        <div>
+                            <h2>Cronograma Completo</h2>
+                            <p>17 Módulos de Formação Progressiva — Estrutura Acadêmica Completa</p>
+                        </div>
+                        <div class="cronograma-controls">
+                            <div class="search-box">
+                                <i class="fa-solid fa-magnifying-glass"></i>
+                                <input type="text" id="cron-search" placeholder="Pesquisar dias, temas ou assuntos...">
+                            </div>
+                            <div class="filter-buttons" id="cron-filters">
+                                <button class="filter-btn active" data-filter="all">Todos</button>
+                                <button class="filter-btn" data-filter="pending">Não Iniciados</button>
+                                <button class="filter-btn" data-filter="in-progress">Em Andamento</button>
+                                <button class="filter-btn" data-filter="completed">Concluídos</button>
+                                <button class="filter-btn" data-filter="favorites"><i class="fa-solid fa-star"></i></button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="modules-accordion" id="modules-accordion-container"></div>
+                </section>
+
+                <!-- PAGE 3: ESTUDO DIÁRIO -->
+                <section id="page-estudo" class="page">
+                    <div class="study-top-nav">
+                        <button class="btn-secondary" id="study-back-cron"><i class="fa-solid fa-arrow-left"></i> Voltar ao Cronograma</button>
+                        <div class="study-pagination-btns">
+                            <button class="btn-secondary" id="study-prev-day"><i class="fa-solid fa-chevron-left"></i> Dia Anterior</button>
+                            <button class="btn-secondary" id="study-next-day">Próximo Dia <i class="fa-solid fa-chevron-right"></i></button>
+                        </div>
+                    </div>
+
+                    <div class="study-card-main">
+                        <div class="scm-header">
+                            <div>
+                                <span class="badge-module" id="study-mod-badge">Módulo 1</span>
+                                <span class="badge-day" id="study-day-badge">Dia 1</span>
+                            </div>
+                            <button class="favorite-toggle-btn" id="study-fav-btn" title="Favoritar este dia">
+                                <i class="fa-regular fa-star"></i>
+                            </button>
+                        </div>
+
+                        <h2 id="study-title">Título do Estudo</h2>
+                        <div class="study-objective-box">
+                            <strong><i class="fa-solid fa-bullseye"></i> Objetivo Organizacional:</strong>
+                            <p id="study-objective-text">Organizar os estudos sobre o tema sem conteúdo prescritivo.</p>
+                        </div>
+
+                        <div class="study-section-box">
+                            <h3><i class="fa-solid fa-list-check"></i> Checklist de Assuntos</h3>
+                            <p class="hint-txt">Marque os tópicos conforme avança em suas pesquisas externas e leituras:</p>
+                            <div class="study-checklist-items" id="study-checklist-container"></div>
+                        </div>
+
+                        <div class="study-notes-grid">
+                            <div class="notes-box-item">
+                                <h3><i class="fa-solid fa-pen-nib"></i> Anotações Pessoais</h3>
+                                <textarea id="study-personal-notes" placeholder="Escreva suas anotações, reflexões e descobertas aqui..."></textarea>
+                            </div>
+                            <div class="notes-box-item">
+                                <h3><i class="fa-solid fa-note-sticky"></i> Observações da Prática</h3>
+                                <textarea id="study-observations" placeholder="Registre observações adicionais ou pendências..."></textarea>
+                            </div>
+                        </div>
+
+                        <div class="study-actions-footer">
+                            <button class="btn-success" id="study-btn-complete">
+                                <i class="fa-solid fa-check"></i> <span id="study-complete-label">Marcar Dia como Concluído</span>
+                            </button>
+                            <button class="btn-primary" id="study-btn-save">
+                                <i class="fa-solid fa-floppy-disk"></i> Salvar Progresso e Anotações
+                            </button>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- PAGE 4: BIBLIOTECA DE CARTAS -->
+                <section id="page-biblioteca" class="page">
+                    <div class="page-header-flex">
+                        <div>
+                            <h2>Biblioteca de Cartas (78 Arcanos)</h2>
+                            <p>Organização estrutural dos 22 Arcanos Maiores e 56 Arcanos Menores</p>
+                        </div>
+                        <div class="deck-tabs" id="deck-tabs-nav">
+                            <button class="tab-chip active" data-deck="maiores">Arcanos Maiores (22)</button>
+                            <button class="tab-chip" data-deck="paus">Paus (14)</button>
+                            <button class="tab-chip" data-deck="copas">Copas (14)</button>
+                            <button class="tab-chip" data-deck="espadas">Espadas (14)</button>
+                            <button class="tab-chip" data-deck="ouros">Ouros (14)</button>
+                        </div>
+                    </div>
+
+                    <div class="card-grid-library" id="cards-library-grid"></div>
+                </section>
+
+                <!-- PAGE 5: MEU PROGRESSO -->
+                <section id="page-progresso" class="page">
+                    <div class="page-header-flex">
+                        <div>
+                            <h2>Meu Progresso na Formação</h2>
+                            <p>Acompanhamento detalhado da sua evolução acadêmica</p>
+                        </div>
+                    </div>
+
+                    <div class="stats-overview-grid">
+                        <div class="stat-card-big">
+                            <div class="scb-icon"><i class="fa-solid fa-graduation-cap"></i></div>
+                            <div class="scb-data">
+                                <span class="scb-number" id="prog-pct-big">0%</span>
+                                <span class="scb-label">Formação Concluída</span>
+                            </div>
+                        </div>
+                        <div class="stat-card-big">
+                            <div class="scb-icon"><i class="fa-solid fa-calendar-check"></i></div>
+                            <div class="scb-data">
+                                <span class="scb-number" id="prog-days-big">0 / 395</span>
+                                <span class="scb-label">Dias Concluídos</span>
+                            </div>
+                        </div>
+                        <div class="stat-card-big">
+                            <div class="scb-icon"><i class="fa-solid fa-fire"></i></div>
+                            <div class="scb-data">
+                                <span class="scb-number" id="prog-streak-big">0</span>
+                                <span class="scb-label">Dias Consecutivos (Streak)</span>
+                            </div>
+                        </div>
+                        <div class="stat-card-big">
+                            <div class="scb-icon"><i class="fa-solid fa-layer-group"></i></div>
+                            <div class="scb-data">
+                                <span class="scb-number" id="prog-modules-big">0 / 17</span>
+                                <span class="scb-label">Módulos Finalizados</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="dashboard-grid">
+                        <div class="card">
+                            <h3>Evolução por Módulo</h3>
+                            <div class="modules-progress-list" id="modules-progress-bars"></div>
+                        </div>
+                        <div class="card">
+                            <h3>Calendário de Atividades (Heatmap Recente)</h3>
+                            <p class="hint-txt">Dias estudados nos últimos 30 dias</p>
+                            <div class="heatmap-grid" id="activity-heatmap"></div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- PAGE 6: ANOTAÇÕES -->
+                <section id="page-anotacoes" class="page">
+                    <div class="page-header-flex">
+                        <div>
+                            <h2>Caderno de Anotações Pessoais</h2>
+                            <p>Espaço livre para registrar suas reflexões, pesquisas e sínteses</p>
+                        </div>
+                        <button class="btn-primary" id="btn-new-note">
+                            <i class="fa-solid fa-plus"></i> Nova Anotação
+                        </button>
+                    </div>
+
+                    <div class="notes-controls">
+                        <div class="search-box">
+                            <i class="fa-solid fa-magnifying-glass"></i>
+                            <input type="text" id="notes-search" placeholder="Pesquisar nas anotações...">
+                        </div>
+                    </div>
+
+                    <div class="notes-grid" id="notes-list-grid"></div>
+                </section>
+
+                <!-- PAGE 7: CONFIGURAÇÕES -->
+                <section id="page-configuracoes" class="page">
+                    <div class="page-header-flex">
+                        <div>
+                            <h2>Configurações do Planejador</h2>
+                            <p>Personalize sua jornada e gerencie seus dados acadêmicos</p>
+                        </div>
+                    </div>
+
+                    <div class="settings-card card">
+                        <div class="form-group">
+                            <label for="cfg-username">Nome da Estudante / Taróloga</label>
+                            <input type="text" id="cfg-username" value="Taróloga">
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="cfg-start-date">Data de Início dos Estudos</label>
+                                <input type="date" id="cfg-start-date">
+                            </div>
+                            <div class="form-group">
+                                <label for="cfg-days-week">Dias de Estudo por Semana</label>
+                                <select id="cfg-days-week">
+                                    <option value="5">5 dias por semana (Seg a Sex)</option>
+                                    <option value="6">6 dias por semana (Seg a Sáb)</option>
+                                    <option value="7" selected>7 dias por semana (Todos os dias)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-group checkbox-group">
+                            <label>
+                                <input type="checkbox" id="cfg-reminders" checked> Ativar lembretes visuais e motivação diária
+                            </label>
+                        </div>
+
+                        <div class="settings-actions">
+                            <button class="btn-primary" id="btn-save-settings"><i class="fa-solid fa-floppy-disk"></i> Salvar Configurações</button>
+                        </div>
+
+                        <hr class="separator">
+
+                        <div class="danger-zone">
+                            <h3>Zona de Perigo</h3>
+                            <p>Reiniciar todo o progresso apagará todos os checklists, anotações e dias concluídos. Esta ação não pode ser desfeita.</p>
+                            <button class="btn-danger" id="btn-reset-data"><i class="fa-solid fa-triangle-exclamation"></i> Reiniciar Progresso da Formação</button>
+                        </div>
+                    </div>
+                </section>
+
+            </div>
+        </main>
+    </div>
+
+    <!-- MODAL FOR CARD DETAILS -->
+    <div class="modal-overlay" id="card-modal">
+        <div class="modal-card">
+            <button class="modal-close" id="modal-close-btn"><i class="fa-solid fa-xmark"></i></button>
+            <div class="modal-header">
+                <span id="modal-card-category" class="badge-module">Arcanos Maiores</span>
+                <span id="modal-card-num" class="badge-day">Carta 01</span>
+            </div>
+            <h2 id="modal-card-name">O Louco</h2>
+            <div class="modal-body-content">
+                <div class="mc-status-row">
+                    <span>Status de Estudo: <strong id="modal-card-status">Não Iniciado</strong></span>
+                    <span id="modal-card-dates">Início: - | Conclusão: -</span>
+                </div>
+                <h3>Tópicos Programados para esta Carta:</h3>
+                <ul class="modal-topics-list" id="modal-card-topics"></ul>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-primary" id="modal-goto-day-btn">Ir para o Dia de Estudo</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL FOR EDITING / CREATING NOTE -->
+    <div class="modal-overlay" id="note-modal">
+        <div class="modal-card">
+            <button class="modal-close" id="note-modal-close"><i class="fa-solid fa-xmark"></i></button>
+            <h2 id="note-modal-title">Nova Anotação</h2>
+            <div class="form-group" style="margin-top: 15px;">
+                <label>Título da Anotação</label>
+                <input type="text" id="note-input-title" placeholder="Ex: Reflexão sobre o Arcano 0...">
+            </div>
+            <div class="form-group">
+                <label>Vincular a Módulo ou Carta (Opcional)</label>
+                <input type="text" id="note-input-tag" placeholder="Ex: Módulo 1 ou O Louco">
+            </div>
+            <div class="form-group">
+                <label>Conteúdo</label>
+                <textarea id="note-input-content" rows="6" placeholder="Escreva suas anotações aqui..."></textarea>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-primary" id="note-save-btn">Salvar Anotação</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Script JS -->
+    <script src="script.js"></script>
+</body>
+</html>
